@@ -4,15 +4,15 @@ import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDILZfBb2ioBsGLLLEyyj164nPQTNrlKe0",
-  authDomain: "tarjeta-joven-escuinapa.firebaseapp.com",
-  projectId: "tarjeta-joven-escuinapa",
-  storageBucket: "tarjeta-joven-escuinapa.firebasestorage.app",
-  messagingSenderId: "215334618974",
-  appId: "1:215334618974:web:e1111ce2a37585afb2f1cf"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Esta línea es la magia: Evita que la app colapse al intentar encender Firebase dos veces
+// Evita inicializar Firebase más de una vez durante el desarrollo de Next.js.
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 export const auth = getAuth(app);

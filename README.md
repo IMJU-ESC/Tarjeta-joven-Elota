@@ -1,36 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Tarjeta Joven Elota
 
-## Getting Started
+Portal web del Instituto Municipal de la Juventud de Elota para jóvenes, negocios aliados y personal administrador.
 
-First, run the development server:
+## Estado de esta copia
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- Identidad institucional adaptada a Elota.
+- Logotipos de IMJU Elota y H. Ayuntamiento de Elota incorporados.
+- Mapa centrado en La Cruz, Elota.
+- Facebook, domicilio y correo institucional actualizados.
+- Firebase anterior desconectado y sustituido por variables de entorno.
+- Correo SMTP trasladado a variables de entorno.
+- Dependencia de cámara incompatible sustituida por la cámara nativa del navegador.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Esta copia no está conectada todavía a un Firebase real. Es intencional para evitar cualquier comunicación con el portal original.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Inicio local
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Instala Node.js 20 o superior.
+2. Ejecuta `npm install` dentro de esta carpeta.
+3. Copia `.env.example` como `.env.local`.
+4. Completa las variables del nuevo proyecto Firebase.
+5. Ejecuta `npm run dev`.
+6. Abre `http://localhost:3000`.
 
-## Learn More
+## Variables necesarias
 
-To learn more about Next.js, take a look at the following resources:
+Consulta `.env.example`. Nunca publiques `.env.local` ni una contraseña de aplicación de Google en GitHub.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Rutas principales
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `/`: página inicial.
+- `/login`: registro e ingreso de jóvenes.
+- `/tarjeta`: tarjeta digital, beneficios y empleos.
+- `/directorio`: directorio público de negocios.
+- `/login-negocio`: registro e ingreso de comercios.
+- `/portal-negocios`: panel para comercios aliados.
+- `/panel-imju-elota`: panel administrativo.
+- `/aviso-de-privacidad`: aviso de privacidad.
 
-## Deploy on Vercel
+## Datos institucionales
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- Nombre: Tarjeta Joven Elota.
+- Instituto: Instituto Municipal de la Juventud de Elota.
+- Dirección: Av. Gabriel Leyva S/N, Centro, C.P. 82700, La Cruz, Sinaloa.
+- Correo: tarjetaimjuelota@gmail.com.
+- Facebook: https://www.facebook.com/profile.php?id=100075974077385
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Antes de publicar
+
+El sistema heredado utiliza un acceso propio para jóvenes y negocios. Antes de recibir registros reales se debe completar una segunda etapa de seguridad: migrar esos accesos a Firebase Authentication, crear reglas restrictivas de Firestore y Storage y proteger la ruta de envío de correos con validación administrativa. No uses Firebase en modo de prueba para producción.

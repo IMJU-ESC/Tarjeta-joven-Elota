@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+:root {
+  --brand-primary: #D65F08;
+  --brand-orange: #F58220;
+  --brand-yellow: #F4C425;
+  --brand-green: #25883A;
+  --brand-cyan: #24B5D6;
+  --brand-pink: #F70476;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+}
