@@ -1,5 +1,5 @@
 {
-  "name": "tarjeta-joven",
+  "name": "tarjeta-joven-elota",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,20 +9,18 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@emailjs/browser": "^4.4.1",
     "@types/nodemailer": "^8.0.1",
     "@yudiel/react-qr-scanner": "^2.5.1",
     "browser-image-compression": "^2.0.2",
-    "firebase": "^12.9.0",
+    "firebase": "^12.19.0",
     "leaflet": "^1.9.4",
-    "next": "16.1.6",
-    "nodemailer": "^9.0.3",
+    "next": "16.3.5",
+    "nodemailer": "^10.0.8",
     "qrcode.react": "^4.2.0",
     "react": "19.2.3",
-    "react-camera-pro": "^1.4.0",
     "react-dom": "19.2.3",
     "react-leaflet": "^5.0.0",
-    "styled-components": "^6.3.11"
+    "styled-components": "^6.5.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -31,7 +29,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.1.6",
+    "eslint-config-next": "16.3.5",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
