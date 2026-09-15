@@ -1,0 +1,54 @@
+TARJETA JOVEN ELOTA - ACTUALIZACION DE REGISTROS
+=================================================
+
+1. REEMPLAZAR LA CARPETA
+------------------------
+Conserva tu archivo .env local actual. No lo borres ni lo subas a GitHub.
+Reemplaza los archivos del proyecto con los contenidos de este ZIP.
+
+2. PUBLICAR REGLAS DE FIRESTORE
+-------------------------------
+En Firebase abre Firestore Database > Reglas.
+Copia todo el contenido de firestore.rules, pegalo y presiona Publicar.
+
+3. PUBLICAR REGLAS DE STORAGE
+-----------------------------
+En Firebase abre Storage > Reglas.
+Copia todo el contenido de storage.rules, pegalo y presiona Publicar.
+Si Firebase solicita permiso para conectar las reglas de Storage con Firestore,
+acepta la solicitud.
+
+4. PROBAR EN VISUAL STUDIO CODE
+-------------------------------
+Abre la terminal dentro del proyecto y ejecuta:
+
+  npm install
+  npm run build
+
+5. SUBIR A GITHUB
+-----------------
+Si el build termina correctamente, ejecuta:
+
+  git add .
+  git commit -m "Completar registros, contrasenas y QR"
+  git push origin main
+
+Vercel iniciara automaticamente un despliegue nuevo.
+
+6. PRUEBAS RECOMENDADAS
+-----------------------
+A) Registrar un joven desde /login. Debe quedar Pendiente.
+B) Aprobarlo desde /panel-imju-elota. Debe recibir correo, tener una
+   contrasena y un codigo QR diferente, y borrarse el documento probatorio.
+C) Registrar un joven desde el panel. Debe quedar Activo y recibir correo.
+D) Registrar un negocio desde /login-negocio. Debe quedar Pendiente y sin
+   contrasena hasta su aprobacion.
+E) Aprobar el negocio. Debe recibir su contrasena por correo y borrarse la
+   evidencia de fachada.
+F) Registrar un negocio desde el panel. Debe quedar Activo y recibir correo.
+
+IMPORTANTE
+----------
+La fotografia del joven y el logo del negocio se conservan cuando se aprueban.
+Cuando una solicitud se rechaza, se eliminan el registro y sus archivos.
+El QR del joven nunca se reutiliza como contrasena.

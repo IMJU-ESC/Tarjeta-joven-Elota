@@ -2,10 +2,11 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Camera, type CameraHandle } from "@/components/NativeCamera";
-import { collection, addDoc, query, where, getDocs, getDoc, deleteDoc, doc, updateDoc, setDoc } from "firebase/firestore"; 
+import { collection, addDoc, query, where, getDocs, getDoc, deleteDoc, deleteField, doc, updateDoc, setDoc } from "firebase/firestore"; 
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
-import { ref, uploadString, getDownloadURL } from "firebase/storage";
+import { ref, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
 import { db, auth, storage } from "../../firebase";
+import { generarCodigoQrJoven, generarContrasenaJoven, generarContrasenaNegocio, normalizarCorreo } from "@/lib/credenciales";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -270,32 +271,79 @@ export default function PanelAdministrativo() {
     return edadCalculada;
   };
 
+  const enviarCorreoSistema = async (datos: Record<string, string>) => {
+    const respuesta = await fetch('/api/enviar-correo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(datos),
+    });
+
+    const resultado = await respuesta.json().catch(() => ({}));
+    if (!respuesta.ok) {
+      throw new Error(resultado?.error || "No fue posible enviar el correo.");
+    }
+  };
+
+  const eliminarArchivoStorage = async (rutaOUrl?: string) => {
+    if (!rutaOUrl) return;
+
+    try {
+      await deleteObject(ref(storage, rutaOUrl));
+    } catch (error: any) {
+      if (error?.code !== "storage/object-not-found") throw error;
+    }
+  };
+
   const aprobarSolicitud = async (joven: any) => {
     if(!window.confirm(`¿Aprobar y generar acceso para ${joven.nombreCompleto}?`)) return;
     setCargando(true);
     try {
-      const nuevaPassword = "IMJU-" + Math.floor(Math.random() * 900000 + 100000);
+      const nuevaPassword = generarContrasenaJoven();
+      const nuevoCodigoQr = generarCodigoQrJoven();
       
       await updateDoc(doc(db, "jovenes", joven.idFirebase), {
-         estatus: "Activo", contrasena: nuevaPassword, codigoUnicoQR: nuevaPassword
+         estatus: "Activo",
+         contrasena: nuevaPassword,
+         codigoUnicoQR: nuevoCodigoQr,
+         fechaAprobacion: new Date().toISOString(),
       });
-      
-      try {
-        await fetch('/api/enviar-correo', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tipo: 'aprobacion',
-            correo: joven.correo,
-            nombre: joven.nombreCompleto,
-            password: nuevaPassword
-          })
-        });
-      } catch(e) { console.error("Error email", e)}
 
-      alert("¡Joven aprobado! Se le ha enviado un correo con su nueva contraseña.");
-      cargarDirectorio(adminActual.rol);
-    } catch(e) { alert("Error al aprobar"); }
+      let documentoEliminado = true;
+      try {
+        await eliminarArchivoStorage(joven.documentoProbatorioPath || joven.documentoProbatorio);
+        await updateDoc(doc(db, "jovenes", joven.idFirebase), {
+          documentoProbatorio: deleteField(),
+          documentoProbatorioPath: deleteField(),
+        });
+      } catch (error) {
+        documentoEliminado = false;
+        console.error("No fue posible borrar el documento probatorio:", error);
+      }
+
+      let correoEnviado = true;
+      try {
+        await enviarCorreoSistema({
+          tipo: 'aprobacion',
+          correo: joven.correo,
+          nombre: joven.nombreCompleto,
+          password: nuevaPassword,
+        });
+      } catch(error) {
+        correoEnviado = false;
+        console.error("Error enviando acceso al joven:", error);
+      }
+
+      const avisos = ["¡Joven aprobado! Su contraseña y QR único ya fueron generados."];
+      avisos.push(correoEnviado
+        ? "La contraseña fue enviada por correo."
+        : `No se pudo enviar el correo. Entrega manualmente esta contraseña: ${nuevaPassword}`);
+      if (!documentoEliminado) avisos.push("Aviso: no se pudo eliminar el documento probatorio de Storage.");
+      alert(avisos.join("\n\n"));
+      await cargarDirectorio(adminActual.rol);
+    } catch(error: any) {
+      console.error("Error aprobando joven:", error);
+      alert(`Error al aprobar: ${error?.code || error?.message || "error desconocido"}`);
+    }
     setCargando(false);
   }
 
@@ -305,23 +353,31 @@ export default function PanelAdministrativo() {
      
      setCargando(true);
      try {
-       try {
-         await fetch('/api/enviar-correo', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tipo: 'rechazo',
-            correo: joven.correo,
-            nombre: joven.nombreCompleto,
-            motivo: motivo
-          })
-        });
-       } catch(e) { console.error("Error al enviar correo de rechazo", e); }
-       
+       await eliminarArchivoStorage(joven.documentoProbatorioPath || joven.documentoProbatorio);
+       await eliminarArchivoStorage(joven.fotoPerfilPath || joven.fotoPerfil);
        await deleteDoc(doc(db, "jovenes", joven.idFirebase));
-       alert("Solicitud rechazada. Se eliminó del registro.");
-       cargarDirectorio(adminActual.rol);
-     } catch(e) { alert("Error al procesar el rechazo"); }
+
+       let correoEnviado = true;
+       try {
+         await enviarCorreoSistema({
+           tipo: 'rechazo',
+           correo: joven.correo,
+           nombre: joven.nombreCompleto,
+           motivo,
+         });
+       } catch(error) {
+         correoEnviado = false;
+         console.error("Error enviando rechazo al joven:", error);
+       }
+
+       alert(correoEnviado
+         ? "Solicitud rechazada. El registro y sus archivos fueron eliminados."
+         : "Solicitud rechazada y archivos eliminados, pero el correo no pudo enviarse.");
+       await cargarDirectorio(adminActual.rol);
+     } catch(error: any) {
+       console.error("Error rechazando joven:", error);
+       alert(`No se completó el rechazo: ${error?.code || error?.message || "error desconocido"}`);
+     }
      setCargando(false);
   }
 
@@ -329,21 +385,52 @@ export default function PanelAdministrativo() {
     if(!window.confirm(`¿Aprobar al negocio ${negocio.nombreComercial}?`)) return;
     setCargando(true);
     try {
-      await updateDoc(doc(db, "negocios", negocio.idFirebase), { estatus: "Activo" });
+      const nuevaPassword = generarContrasenaNegocio();
+      await updateDoc(doc(db, "negocios", negocio.idFirebase), {
+        estatus: "Activo",
+        contrasena: nuevaPassword,
+        fechaAprobacion: new Date().toISOString(),
+      });
       
       // ✅ CENTINELA: Actualizar caché para que el negocio aparezca en la tarjeta
       await setDoc(doc(db, "sistema", "estado"), { ultimaActualizacion: Date.now() }, { merge: true });
 
+      let evidenciaEliminada = true;
       try {
-        await fetch('/api/enviar-correo', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tipo: 'aprobacion_negocio', correo: negocio.correo, nombre: negocio.nombreComercial, password: negocio.contrasena })
+        await eliminarArchivoStorage(negocio.evidenciaFachadaPath || negocio.evidenciaFachada);
+        await updateDoc(doc(db, "negocios", negocio.idFirebase), {
+          evidenciaFachada: deleteField(),
+          evidenciaFachadaPath: deleteField(),
         });
-      } catch(e) {}
-      alert("¡Negocio aprobado! Se le envió su acceso por correo.");
-      cargarDirectorio(adminActual.rol);
-    } catch(e) { alert("Error al aprobar"); }
+      } catch(error) {
+        evidenciaEliminada = false;
+        console.error("No fue posible borrar la evidencia del negocio:", error);
+      }
+
+      let correoEnviado = true;
+      try {
+        await enviarCorreoSistema({
+          tipo: 'aprobacion_negocio',
+          correo: negocio.correo,
+          nombre: negocio.nombreComercial,
+          password: nuevaPassword,
+        });
+      } catch(error) {
+        correoEnviado = false;
+        console.error("Error enviando acceso al negocio:", error);
+      }
+
+      const avisos = ["¡Negocio aprobado y contraseña generada!"];
+      avisos.push(correoEnviado
+        ? "La contraseña fue enviada por correo."
+        : `No se pudo enviar el correo. Entrega manualmente esta contraseña: ${nuevaPassword}`);
+      if (!evidenciaEliminada) avisos.push("Aviso: no se pudo eliminar la evidencia de fachada de Storage.");
+      alert(avisos.join("\n\n"));
+      await cargarDirectorio(adminActual.rol);
+    } catch(error: any) {
+      console.error("Error aprobando negocio:", error);
+      alert(`Error al aprobar: ${error?.code || error?.message || "error desconocido"}`);
+    }
     setCargando(false);
   }
 
@@ -352,17 +439,32 @@ export default function PanelAdministrativo() {
      if(!motivo) return;
      setCargando(true);
      try {
-       try {
-         await fetch('/api/enviar-correo', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tipo: 'rechazo_negocio', correo: negocio.correo, nombre: negocio.nombreComercial, motivo: motivo })
-        });
-       } catch(e) {}
+       await eliminarArchivoStorage(negocio.evidenciaFachadaPath || negocio.evidenciaFachada);
+       await eliminarArchivoStorage(negocio.logoPath || negocio.logo);
        await deleteDoc(doc(db, "negocios", negocio.idFirebase));
-       alert("Solicitud de negocio rechazada.");
-       cargarDirectorio(adminActual.rol);
-     } catch(e) { alert("Error al rechazar"); }
+       await setDoc(doc(db, "sistema", "estado"), { ultimaActualizacion: Date.now() }, { merge: true });
+
+       let correoEnviado = true;
+       try {
+         await enviarCorreoSistema({
+           tipo: 'rechazo_negocio',
+           correo: negocio.correo,
+           nombre: negocio.nombreComercial,
+           motivo,
+         });
+       } catch(error) {
+         correoEnviado = false;
+         console.error("Error enviando rechazo al negocio:", error);
+       }
+
+       alert(correoEnviado
+         ? "Solicitud rechazada. El registro y sus archivos fueron eliminados."
+         : "Solicitud rechazada y archivos eliminados, pero el correo no pudo enviarse.");
+       await cargarDirectorio(adminActual.rol);
+     } catch(error: any) {
+       console.error("Error rechazando negocio:", error);
+       alert(`No se completó el rechazo: ${error?.code || error?.message || "error desconocido"}`);
+     }
      setCargando(false);
   }
 
@@ -396,60 +498,74 @@ export default function PanelAdministrativo() {
 
     setCargando(true);
     try {
-      const q = query(collection(db, "jovenes"), where("correo", "==", correo.trim()));
+      const correoNormalizado = normalizarCorreo(correo);
+      const q = query(collection(db, "jovenes"), where("correo", "==", correoNormalizado));
       const validacion = await getDocs(q);
       
       if (modoEdicion) {
         if (validacion.docs.some(doc => doc.id !== idEditando)) { alert("¡Ese correo ya pertenece a otro joven!"); setCargando(false); return; }
 
         let nuevaUrlFoto = fotoBase64;
+        let nuevaRutaFoto: string | undefined;
         if (fotoBase64 && fotoBase64.startsWith("data:image")) {
-           const fotoRef = ref(storage, `jovenes_perfiles/${Date.now()}_perfil_edit.jpg`);
+           const fotoRef = ref(storage, `jovenes_perfiles/${globalThis.crypto.randomUUID()}_perfil_edit.jpg`);
            await uploadString(fotoRef, fotoBase64, 'data_url');
            nuevaUrlFoto = await getDownloadURL(fotoRef);
+           nuevaRutaFoto = fotoRef.fullPath;
         }
 
         await updateDoc(doc(db, "jovenes", idEditando), {
           nombreCompleto: nombre.trim(), fechaNacimiento: fechaNacimiento, localidad: localidad.trim(),
-          correo: correo.trim(), genero: genero, ocupacion: ocupacion, fotoPerfil: nuevaUrlFoto 
+          correo: correoNormalizado, genero: genero, ocupacion: ocupacion, fotoPerfil: nuevaUrlFoto,
+          ...(nuevaRutaFoto ? { fotoPerfilPath: nuevaRutaFoto } : {}),
         });
         alert("¡Datos del joven actualizados!");
       } else {
         if (!validacion.empty) { alert("¡Este correo ya está registrado en el sistema!"); setCargando(false); return; }
 
-        const nuevaPassword = "IMJU-" + Math.floor(Math.random() * 900000 + 100000);
+        const nuevaPassword = generarContrasenaJoven();
+        const nuevoCodigoQr = generarCodigoQrJoven();
         let nuevaUrlFoto = fotoBase64;
+        let nuevaRutaFoto = "";
         if (fotoBase64 && fotoBase64.startsWith("data:image")) {
-           const fotoRef = ref(storage, `jovenes_perfiles/${Date.now()}_perfil_alta.jpg`);
+           const fotoRef = ref(storage, `jovenes_perfiles/${globalThis.crypto.randomUUID()}_perfil_alta.jpg`);
            await uploadString(fotoRef, fotoBase64, 'data_url');
            nuevaUrlFoto = await getDownloadURL(fotoRef);
+           nuevaRutaFoto = fotoRef.fullPath;
         }
 
         await addDoc(collection(db, "jovenes"), {
           nombreCompleto: nombre.trim(), fechaNacimiento: fechaNacimiento, localidad: localidad.trim(),
-          correo: correo.trim(), genero: genero, ocupacion: ocupacion, fotoPerfil: nuevaUrlFoto,
-          estatus: "Activo", contrasena: nuevaPassword, codigoUnicoQR: nuevaPassword, fechaRegistro: new Date().toISOString()
+          correo: correoNormalizado, genero: genero, ocupacion: ocupacion,
+          fotoPerfil: nuevaUrlFoto, fotoPerfilPath: nuevaRutaFoto,
+          estatus: "Activo", contrasena: nuevaPassword, codigoUnicoQR: nuevoCodigoQr,
+          fechaRegistro: new Date().toISOString(), fechaAprobacion: new Date().toISOString(),
         });
 
+        let correoEnviado = true;
         try {
-          await fetch('/api/enviar-correo', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              tipo: 'aprobacion',
-              correo: correo.trim(),
-              nombre: nombre.trim(),
-              password: nuevaPassword
-            })
+          await enviarCorreoSistema({
+            tipo: 'aprobacion',
+            correo: correoNormalizado,
+            nombre: nombre.trim(),
+            password: nuevaPassword,
           });
-        } catch(e) { console.error("Error email alta presencial", e)}
+        } catch(error) {
+          correoEnviado = false;
+          console.error("Error enviando acceso del alta presencial:", error);
+        }
 
-        alert(`¡Joven ${nombre.trim()} dado de alta exitosamente! Se le ha enviado un correo con sus accesos.`);
+        alert(correoEnviado
+          ? `¡Joven ${nombre.trim()} registrado! La contraseña fue enviada por correo y su QR único ya está activo.`
+          : `¡Joven registrado y QR generado! No se pudo enviar el correo. Entrega esta contraseña: ${nuevaPassword}`);
       }
 
       cancelarEdicionJoven(); 
       cargarDirectorio(adminActual.rol);
-    } catch (error) { alert("Error al guardar los datos del joven."); }
+    } catch (error: any) {
+      console.error("Error guardando joven:", error);
+      alert(`Error al guardar al joven: ${error?.code || error?.message || "error desconocido"}`);
+    }
     setCargando(false);
   };
 
@@ -475,32 +591,55 @@ export default function PanelAdministrativo() {
 
   const registrarNegocio = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nombreNegocio || !giroNegocio || !correoNegocio || !passwordNegocio || !horarioNegocio || !telefonoNegocio) { alert("Llena todos los campos del negocio."); return; }
+    if (!nombreNegocio || !giroNegocio || !correoNegocio || !horarioNegocio || !telefonoNegocio) { alert("Llena todos los campos del negocio."); return; }
     if (!logoNegocioBase64) { alert("Falta subir el logo."); return; }
     setCargando(true);
     try {
-      const q = query(collection(db, "negocios"), where("correo", "==", correoNegocio));
+      const correoNormalizado = normalizarCorreo(correoNegocio);
+      const q = query(collection(db, "negocios"), where("correo", "==", correoNormalizado));
       if (!(await getDocs(q)).empty) { alert("¡Correo en uso por otro negocio!"); setCargando(false); return; }
 
+      const nuevaPassword = generarContrasenaNegocio();
       let nuevaUrlLogo = logoNegocioBase64;
+      let nuevaRutaLogo = "";
       if (logoNegocioBase64 && logoNegocioBase64.startsWith("data:image")) {
-         const logoRef = ref(storage, `negocios_logos/${Date.now()}_logo.jpg`);
+         const logoRef = ref(storage, `negocios_logos/${globalThis.crypto.randomUUID()}_logo.jpg`);
          await uploadString(logoRef, logoNegocioBase64, 'data_url');
          nuevaUrlLogo = await getDownloadURL(logoRef);
+         nuevaRutaLogo = logoRef.fullPath;
       }
 
       await addDoc(collection(db, "negocios"), {
-        nombreComercial: nombreNegocio.trim(), giro: giroNegocio.trim(), correo: correoNegocio.trim(),
-        contrasena: passwordNegocio, logo: nuevaUrlLogo, estatus: "Activo", fechaRegistro: new Date().toISOString(),
+        nombreComercial: nombreNegocio.trim(), giro: giroNegocio.trim(), correo: correoNormalizado,
+        contrasena: nuevaPassword, logo: nuevaUrlLogo, logoPath: nuevaRutaLogo,
+        estatus: "Activo", fechaRegistro: new Date().toISOString(), fechaAprobacion: new Date().toISOString(),
         lat: latNegocio, lng: lngNegocio, horario: horarioNegocio.trim(), telefono: telefonoNegocio.trim()
       });
       
       // ✅ CENTINELA: Actualizar caché
       await setDoc(doc(db, "sistema", "estado"), { ultimaActualizacion: Date.now() }, { merge: true });
 
-      alert(`¡Negocio "${nombreNegocio}" registrado con éxito!`);
+      let correoEnviado = true;
+      try {
+        await enviarCorreoSistema({
+          tipo: 'aprobacion_negocio',
+          correo: correoNormalizado,
+          nombre: nombreNegocio.trim(),
+          password: nuevaPassword,
+        });
+      } catch(error) {
+        correoEnviado = false;
+        console.error("Error enviando acceso del negocio:", error);
+      }
+
+      alert(correoEnviado
+        ? `¡Negocio "${nombreNegocio}" registrado! La contraseña fue enviada por correo.`
+        : `¡Negocio registrado! No se pudo enviar el correo. Entrega esta contraseña: ${nuevaPassword}`);
       cancelarEdicionNegocio(); cargarDirectorio(adminActual.rol);
-    } catch (error) { alert("Error al registrar el negocio."); }
+    } catch (error: any) {
+      console.error("Error registrando negocio desde el panel:", error);
+      alert(`Error al registrar el negocio: ${error?.code || error?.message || "error desconocido"}`);
+    }
     setCargando(false);
   };
 
@@ -509,7 +648,8 @@ export default function PanelAdministrativo() {
     if (!nombreNegocio || !giroNegocio || !correoNegocio || !passwordNegocio || !horarioNegocio || !telefonoNegocio) { alert("Llena todos los campos."); return; }
     setCargando(true);
     try {
-      const q = query(collection(db, "negocios"), where("correo", "==", correoNegocio));
+      const correoNormalizado = normalizarCorreo(correoNegocio);
+      const q = query(collection(db, "negocios"), where("correo", "==", correoNormalizado));
       const validacion = await getDocs(q);
       if (validacion.docs.some(doc => doc.id !== idEditandoNegocio)) { alert("¡Ese correo ya pertenece a otro negocio!"); setCargando(false); return; }
 
@@ -521,7 +661,7 @@ export default function PanelAdministrativo() {
       }
 
       await updateDoc(doc(db, "negocios", idEditandoNegocio), {
-        nombreComercial: nombreNegocio.trim(), giro: giroNegocio.trim(), correo: correoNegocio.trim(),
+        nombreComercial: nombreNegocio.trim(), giro: giroNegocio.trim(), correo: correoNormalizado,
         contrasena: passwordNegocio, logo: nuevaUrlLogo, lat: latNegocio, lng: lngNegocio,
         horario: horarioNegocio.trim(), telefono: telefonoNegocio.trim()
       });
@@ -1213,7 +1353,13 @@ export default function PanelAdministrativo() {
               </div>
 
               <input type="email" value={correoNegocio} onChange={(e) => setCorreoNegocio(e.target.value)} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-emerald-500 font-bold text-slate-700 transition-all outline-none shadow-sm" placeholder="Correo para Acceso" required disabled={modoEdicionNegocio} />
-              <input type="text" value={passwordNegocio} onChange={(e) => setPasswordNegocio(e.target.value)} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-emerald-500 font-bold text-slate-700 transition-all outline-none shadow-sm" placeholder="Contraseña asignada" required />
+              {modoEdicionNegocio ? (
+                <input type="text" value={passwordNegocio} onChange={(e) => setPasswordNegocio(e.target.value)} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-emerald-500 font-bold text-slate-700 transition-all outline-none shadow-sm" placeholder="Contraseña asignada" required />
+              ) : (
+                <div className="w-full border-2 border-emerald-100 rounded-2xl px-5 py-4 bg-emerald-50 text-emerald-800 text-sm font-bold shadow-sm">
+                  🔐 La contraseña se generará automáticamente y se enviará al correo del negocio.
+                </div>
+              )}
               
               <div className="pt-2">
                  <label className="block text-[10px] font-black uppercase tracking-widest mb-2 text-slate-500 pl-2">Ubicación GPS (Coordenadas)</label>

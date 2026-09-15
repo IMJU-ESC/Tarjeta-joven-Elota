@@ -1,0 +1,73 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function esAdministrador() {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/administradores/$(request.auth.uid));
+    }
+
+    function esImagenPermitida() {
+      return request.resource != null
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    function esDocumentoPermitido() {
+      return request.resource != null
+        && request.resource.size < 10 * 1024 * 1024
+        && (
+          request.resource.contentType.matches('image/.*')
+          || request.resource.contentType == 'application/pdf'
+        );
+    }
+
+    match /jovenes_perfiles/{archivo} {
+      allow get: if true;
+      allow list: if esAdministrador();
+      allow create: if esImagenPermitida();
+      allow update, delete: if esAdministrador();
+    }
+
+    match /jovenes_documentos/{archivo} {
+      allow get: if true;
+      allow list: if esAdministrador();
+      allow create: if esDocumentoPermitido();
+      allow update: if false;
+      allow delete: if esAdministrador();
+    }
+
+    match /negocios_logos/{archivo} {
+      allow get: if true;
+      allow list: if esAdministrador();
+      allow create: if esImagenPermitida();
+      allow update, delete: if esAdministrador();
+    }
+
+    match /negocios_evidencias/{archivo} {
+      allow get: if true;
+      allow list: if esAdministrador();
+      allow create: if esImagenPermitida();
+      allow update: if false;
+      allow delete: if esAdministrador();
+    }
+
+    // El portal actual de negocios todavía no usa Firebase Authentication.
+    match /promociones/{archivo} {
+      allow get, list: if true;
+      allow create, update: if esImagenPermitida();
+      allow delete: if true;
+    }
+
+    match /menus/{archivo} {
+      allow get, list: if true;
+      allow create, update: if esImagenPermitida();
+      allow delete: if true;
+    }
+
+    match /{archivo=**} {
+      allow read, write: if false;
+    }
+  }
+}

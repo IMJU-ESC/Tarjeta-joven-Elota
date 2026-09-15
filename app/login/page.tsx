@@ -7,6 +7,7 @@ import { ref, uploadBytes, uploadString, getDownloadURL } from "firebase/storage
 import { db, storage } from "../../firebase";
 import Link from "next/link";
 import { Camera, type CameraHandle } from "@/components/NativeCamera";
+import { generarContrasenaJoven, normalizarCorreo } from "@/lib/credenciales";
 
 export default function LoginJoven() {
   const [vistaActual, setVistaActual] = useState("login"); 
@@ -45,7 +46,7 @@ export default function LoginJoven() {
     setCargando(true);
 
     try {
-      const q = query(collection(db, "jovenes"), where("correo", "==", correo.trim()));
+      const q = query(collection(db, "jovenes"), where("correo", "==", normalizarCorreo(correo)));
       const resultado = await getDocs(q);
 
       if (resultado.empty) {
@@ -58,7 +59,7 @@ export default function LoginJoven() {
         }
 
         const idFirebase = resultado.docs[0].id; 
-        const passwordCorrecta = datosDelJoven.contrasena || datosDelJoven.codigoUnicoQR;
+        const passwordCorrecta = datosDelJoven.contrasena;
 
         if (password === passwordCorrecta) {
           localStorage.setItem("sesionJoven", JSON.stringify({ idFirebase, ...datosDelJoven }));
@@ -75,25 +76,38 @@ export default function LoginJoven() {
     setEnviandoCorreo(true);
 
     try {
-      const q = query(collection(db, "jovenes"), where("correo", "==", correoRecuperacion.trim()));
+      const q = query(collection(db, "jovenes"), where("correo", "==", normalizarCorreo(correoRecuperacion)));
       const resultado = await getDocs(q);
 
       if (resultado.empty) {
         alert("No encontramos ninguna cuenta vinculada a ese correo.");
       } else {
         const docId = resultado.docs[0].id; const datos = resultado.docs[0].data();
-        await updateDoc(doc(db, "jovenes", docId), { contrasena: datos.codigoUnicoQR });
-        const respuesta = await fetch("/api/enviar-correo", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            tipo: "recuperacion",
-            nombre: datos.nombreCompleto.split(" ")[0],
-            correo: datos.correo,
-            password: datos.codigoUnicoQR,
-          }),
-        });
-        if (!respuesta.ok) throw new Error("No fue posible enviar el correo");
+        if (datos.estatus !== "Activo") {
+          alert("Tu registro todavía no está activo. Espera la validación del IMJU.");
+          setEnviandoCorreo(false);
+          return;
+        }
+
+        const nuevaPassword = generarContrasenaJoven();
+        await updateDoc(doc(db, "jovenes", docId), { contrasena: nuevaPassword });
+        try {
+          const respuesta = await fetch("/api/enviar-correo", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              tipo: "recuperacion",
+              nombre: datos.nombreCompleto.split(" ")[0],
+              correo: datos.correo,
+              password: nuevaPassword,
+            }),
+          });
+          if (!respuesta.ok) throw new Error("No fue posible enviar el correo");
+        } catch (error) {
+          // Si el correo falla, conserva la contraseña anterior para no bloquear la cuenta.
+          await updateDoc(doc(db, "jovenes", docId), { contrasena: datos.contrasena || "" });
+          throw error;
+        }
         alert("¡Listo! Te hemos enviado un correo con las instrucciones.");
         setVistaActual("login"); setCorreoRecuperacion("");
       }
@@ -143,6 +157,7 @@ export default function LoginJoven() {
 
   const registrarJoven = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!regNombre || !regFechaNac || !regCorreo) { alert("Completa tu nombre, fecha de nacimiento y correo."); return; }
     const edad = calcularEdad(regFechaNac);
     if (edad < 12 || edad > 29) { alert(`❌ El reglamento establece que la Tarjeta Joven es para personas de 12 a 29 años. Tu edad calculada es ${edad} años.`); return; }
     if (!regGenero) { alert("Por favor, selecciona tu género en el Paso 1."); return; }
@@ -151,30 +166,38 @@ export default function LoginJoven() {
 
     setRegistrando(true);
     try {
-      const qCheck = query(collection(db, "jovenes"), where("correo", "==", regCorreo.trim()));
+      const correoNormalizado = normalizarCorreo(regCorreo);
+      const qCheck = query(collection(db, "jovenes"), where("correo", "==", correoNormalizado));
       const snapCheck = await getDocs(qCheck);
       if (!snapCheck.empty) { alert("❌ Este correo ya está registrado en la plataforma."); setRegistrando(false); return; }
 
-      const fotoRef = ref(storage, `jovenes_perfiles/${Date.now()}_perfil.jpg`);
+      const identificadorArchivos = globalThis.crypto.randomUUID();
+      const fotoRef = ref(storage, `jovenes_perfiles/${identificadorArchivos}_perfil.jpg`);
       await uploadString(fotoRef, fotoBase64, 'data_url');
       const fotoUrl = await getDownloadURL(fotoRef);
 
       let documentoUrl = "";
+      let documentoPath = "";
       if (docBase64) {
-         const docRef = ref(storage, `jovenes_documentos/${Date.now()}_doc.jpg`);
+         const docRef = ref(storage, `jovenes_documentos/${identificadorArchivos}_documento.jpg`);
          await uploadString(docRef, docBase64, 'data_url');
          documentoUrl = await getDownloadURL(docRef);
+         documentoPath = docRef.fullPath;
       } else if (docFile) {
-         const docRef = ref(storage, `jovenes_documentos/${Date.now()}_${docFile.name}`);
+         const extension = docFile.name.includes(".") ? docFile.name.split(".").pop() : "archivo";
+         const docRef = ref(storage, `jovenes_documentos/${identificadorArchivos}_documento.${extension}`);
          await uploadBytes(docRef, docFile);
          documentoUrl = await getDownloadURL(docRef);
+         documentoPath = docRef.fullPath;
       }
 
       await addDoc(collection(db, "jovenes"), {
         nombreCompleto: regNombre.trim(), fechaNacimiento: regFechaNac, 
         genero: regGenero,
-        correo: regCorreo.trim(),
-        contrasena: "", fotoPerfil: fotoUrl, documentoProbatorio: documentoUrl, 
+        correo: correoNormalizado,
+        contrasena: "", codigoUnicoQR: "",
+        fotoPerfil: fotoUrl, fotoPerfilPath: fotoRef.fullPath,
+        documentoProbatorio: documentoUrl, documentoProbatorioPath: documentoPath,
         estatus: "Pendiente", fechaRegistro: new Date().toISOString()
       });
 
@@ -183,7 +206,10 @@ export default function LoginJoven() {
       setFotoBase64(null); setDocBase64(null); setDocFile(null);
       setVistaActual("login");
 
-    } catch (error) { alert("Hubo un error al enviar tu registro. Inténtalo más tarde."); }
+    } catch (error: any) {
+      console.error("Error registrando joven:", error);
+      alert(`No fue posible enviar tu registro: ${error?.code || error?.message || "error desconocido"}`);
+    }
     setRegistrando(false);
   };
 

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { collection, query, where, getDocs, addDoc } from "firebase/firestore";
 import { ref, uploadString, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../../firebase";
+import { normalizarCorreo } from "@/lib/credenciales";
 import dynamic from "next/dynamic";
 import "leaflet/dist/leaflet.css";
 
@@ -78,25 +79,19 @@ export default function LoginRegistroNegocios() {
     e.preventDefault();
     setCargando(true);
     try {
-      const q = query(collection(db, "negocios"), where("correo", "==", correoLogin.trim()));
+      const q = query(collection(db, "negocios"), where("correo", "==", normalizarCorreo(correoLogin)));
       const snap = await getDocs(q);
       if (!snap.empty) {
-        let accesoConcedido = false;
-        let datosNegocio = null;
-        snap.forEach((doc) => {
-          if (doc.data().contrasena === passLogin) {
-            accesoConcedido = true;
-            datosNegocio = { idFirebase: doc.id, ...doc.data() };
-          }
-        });
+        const documentoNegocio = snap.docs[0];
+        const datosNegocio: any = { idFirebase: documentoNegocio.id, ...documentoNegocio.data() };
 
-        if (accesoConcedido && datosNegocio) {
-          if ((datosNegocio as any).estatus === "Pendiente") {
-             alert("⏳ Tu solicitud aún está en revisión por el Instituto. Te notificaremos por correo cuando sea aprobada.");
-          } else {
-             localStorage.setItem("sesionNegocio", JSON.stringify(datosNegocio));
-             router.push("/portal-negocios");
-          }
+        if (datosNegocio.estatus === "Pendiente") {
+          alert("⏳ Tu solicitud aún está en revisión por el Instituto. Recibirás tu contraseña por correo cuando sea aprobada.");
+        } else if (datosNegocio.estatus !== "Activo") {
+          alert("Tu cuenta de negocio no está activa. Comunícate con el IMJU.");
+        } else if (datosNegocio.contrasena === passLogin) {
+          localStorage.setItem("sesionNegocio", JSON.stringify(datosNegocio));
+          router.push("/portal-negocios");
         } else {
           alert("❌ Contraseña incorrecta.");
         }
@@ -118,27 +113,27 @@ export default function LoginRegistroNegocios() {
 
     setCargando(true);
     try {
-      const q = query(collection(db, "negocios"), where("correo", "==", correoReg.trim()));
+      const correoNormalizado = normalizarCorreo(correoReg);
+      const q = query(collection(db, "negocios"), where("correo", "==", correoNormalizado));
       if (!(await getDocs(q)).empty) { alert("¡Ese correo ya está registrado en el sistema!"); setCargando(false); return; }
 
       // Subir imágenes a Storage
       let urlLogo = logoBase64;
       let urlEvidencia = evidenciaBase64;
       
-      const logoRef = ref(storage, `negocios_logos/${Date.now()}_logo.jpg`);
+      const identificadorArchivos = globalThis.crypto.randomUUID();
+      const logoRef = ref(storage, `negocios_logos/${identificadorArchivos}_logo.jpg`);
       await uploadString(logoRef, logoBase64, 'data_url');
       urlLogo = await getDownloadURL(logoRef);
 
-      const evidenciaRef = ref(storage, `negocios_evidencias/${Date.now()}_evidencia.jpg`);
+      const evidenciaRef = ref(storage, `negocios_evidencias/${identificadorArchivos}_evidencia.jpg`);
       await uploadString(evidenciaRef, evidenciaBase64, 'data_url');
       urlEvidencia = await getDownloadURL(evidenciaRef);
 
-      // Crear contraseña temporal
-      const passwordTemporal = "ALIADO-" + Math.floor(Math.random() * 900000 + 100000);
-
       await addDoc(collection(db, "negocios"), {
-        nombreComercial: nombre.trim(), giro: giro.trim(), correo: correoReg.trim(),
-        contrasena: passwordTemporal, logo: urlLogo, evidenciaFachada: urlEvidencia, 
+        nombreComercial: nombre.trim(), giro: giro.trim(), correo: correoNormalizado,
+        contrasena: "", logo: urlLogo, logoPath: logoRef.fullPath,
+        evidenciaFachada: urlEvidencia, evidenciaFachadaPath: evidenciaRef.fullPath,
         lat: lat, lng: lng, horario: horario.trim(), telefono: telefono.trim(),
         estatus: "Pendiente", fechaRegistro: new Date().toISOString(),
         aceptoTerminos: true // Registro legal en base de datos
@@ -151,7 +146,10 @@ export default function LoginRegistroNegocios() {
       setLogoBase64(null); setEvidenciaBase64(null); setAceptaTerminos(false);
       setVista("login");
       
-    } catch (error) { alert("Error al enviar la solicitud."); console.error(error); }
+    } catch (error: any) {
+      console.error("Error registrando negocio:", error);
+      alert(`No fue posible enviar la solicitud: ${error?.code || error?.message || "error desconocido"}`);
+    }
     setCargando(false);
   };
 
