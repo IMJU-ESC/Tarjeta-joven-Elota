@@ -2,8 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Camera, type CameraHandle } from "@/components/NativeCamera";
-import { collection, addDoc, query, where, getDocs, deleteDoc, doc, updateDoc, setDoc } from "firebase/firestore"; 
-import { signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
+import { collection, addDoc, query, where, getDocs, getDoc, deleteDoc, doc, updateDoc, setDoc } from "firebase/firestore"; 
+import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
 import { ref, uploadString, getDownloadURL } from "firebase/storage";
 import { db, auth, storage } from "../../firebase";
 import { useRouter } from "next/navigation";
@@ -89,20 +89,47 @@ export default function PanelAdministrativo() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user && user.email) {
-        try {
-          const q = query(collection(db, "administradores"), where("correo", "==", user.email));
-          const snap = await getDocs(q);
-          if (!snap.empty) {
-            const dataAdmin = snap.docs[0].data();
-            const usuarioValidado: any = { idFirebase: snap.docs[0].id, uid: user.uid, ...dataAdmin };
-            setAdminActual(usuarioValidado);
-            await cargarDirectorio(usuarioValidado.rol);
-          }
-        } catch(e) { console.error("Error validando sesión automática", e); }
+      if (!user) {
+        setAdminActual(null);
+        setVerificandoSesion(false);
+        return;
       }
-      setVerificandoSesion(false);
+
+      try {
+        // El documento del administrador debe llamarse igual que su UID de Authentication.
+        const adminRef = doc(db, "administradores", user.uid);
+        const adminSnap = await getDoc(adminRef);
+
+        if (!adminSnap.exists()) {
+          await signOut(auth);
+          setAdminActual(null);
+          return;
+        }
+
+        const dataAdmin = adminSnap.data();
+
+        if (dataAdmin.rol !== "Master" && dataAdmin.rol !== "Staff") {
+          await signOut(auth);
+          setAdminActual(null);
+          return;
+        }
+
+        const usuarioValidado: any = {
+          idFirebase: adminSnap.id,
+          uid: user.uid,
+          ...dataAdmin,
+        };
+
+        setAdminActual(usuarioValidado);
+        await cargarDirectorio(dataAdmin.rol);
+      } catch (error) {
+        console.error("Error validando sesión automática:", error);
+        setAdminActual(null);
+      } finally {
+        setVerificandoSesion(false);
+      }
     });
+
     return () => unsubscribe();
   }, []);
 
@@ -120,27 +147,60 @@ export default function PanelAdministrativo() {
   const verificarCredenciales = async (e: React.FormEvent) => {
     e.preventDefault();
     setVerificandoLogin(true);
-    try {
-      const userCredential = await signInWithEmailAndPassword(auth, correoAdminInput.trim(), passAdminInput);
-      const user = userCredential.user;
 
-      if (user.email) {
-         const q = query(collection(db, "administradores"), where("correo", "==", user.email));
-         const snap = await getDocs(q);
-         
-         if (!snap.empty) {
-           const dataAdmin = snap.docs[0].data();
-           const usuarioValidado: any = { idFirebase: snap.docs[0].id, uid: user.uid, ...dataAdmin };
-           setAdminActual(usuarioValidado);
-           cargarDirectorio(usuarioValidado.rol);
-         } else { 
-           alert("❌ Acceso concedido, pero tu usuario no tiene un nivel de acceso asignado en el sistema del panel."); 
-         }
+    try {
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        correoAdminInput.trim().toLowerCase(),
+        passAdminInput
+      );
+
+      const user = userCredential.user;
+      const adminRef = doc(db, "administradores", user.uid);
+      const adminSnap = await getDoc(adminRef);
+
+      if (!adminSnap.exists()) {
+        await signOut(auth);
+        alert("Tu correo y contraseña son correctos, pero no existe un documento de administrador con tu UID.");
+        return;
       }
-    } catch (error: any) { 
-      alert("❌ Credenciales incorrectas. Verifica tu correo y contraseña institucional."); 
+
+      const dataAdmin = adminSnap.data();
+
+      if (dataAdmin.rol !== "Master" && dataAdmin.rol !== "Staff") {
+        await signOut(auth);
+        alert("El usuario existe, pero su rol debe ser exactamente Master o Staff.");
+        return;
+      }
+
+      const usuarioValidado: any = {
+        idFirebase: adminSnap.id,
+        uid: user.uid,
+        ...dataAdmin,
+      };
+
+      setAdminActual(usuarioValidado);
+      await cargarDirectorio(dataAdmin.rol);
+    } catch (error: any) {
+      console.error("Error real al iniciar sesión:", error);
+
+      if (
+        error.code === "auth/invalid-credential" ||
+        error.code === "auth/wrong-password" ||
+        error.code === "auth/user-not-found"
+      ) {
+        alert("El correo o la contraseña no son correctos.");
+      } else if (
+        error.code === "permission-denied" ||
+        error.code === "firestore/permission-denied"
+      ) {
+        alert("El correo y contraseña fueron aceptados, pero las reglas de Firestore bloquearon el acceso.");
+      } else {
+        alert(`Error al iniciar sesión: ${error.code || error.message}`);
+      }
+    } finally {
+      setVerificandoLogin(false);
     }
-    setVerificandoLogin(false);
   };
 
   const cargarDirectorio = async (rolUsuario: string) => {
