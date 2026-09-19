@@ -2,12 +2,11 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { collection, query, where, getDocs, doc, updateDoc, addDoc } from "firebase/firestore";
-import { ref, uploadBytes, uploadString, getDownloadURL } from "firebase/storage";
-import { db, storage } from "../../firebase";
+import { sendPasswordResetEmail, signInWithEmailAndPassword } from "firebase/auth";
+import { auth, authPersistenceReady } from "../../firebase";
 import Link from "next/link";
 import { Camera, type CameraHandle } from "@/components/NativeCamera";
-import { generarContrasenaJoven, normalizarCorreo } from "@/lib/credenciales";
+import { normalizarCorreo } from "@/lib/credenciales";
 
 export default function LoginJoven() {
   const [vistaActual, setVistaActual] = useState("login"); 
@@ -23,6 +22,7 @@ export default function LoginJoven() {
   const [regCorreo, setRegCorreo] = useState("");
   const [regGenero, setRegGenero] = useState("");
   const [registrando, setRegistrando] = useState(false);
+  const [registroExitoso, setRegistroExitoso] = useState(false);
 
   const [fotoBase64, setFotoBase64] = useState<string | null>(null);
   const [docBase64, setDocBase64] = useState<string | null>(null); 
@@ -35,7 +35,7 @@ export default function LoginJoven() {
   const router = useRouter();
 
   useEffect(() => {
-    if (localStorage.getItem("sesionJoven")) {
+    if (auth.currentUser) {
       router.push("/tarjeta");
     }
   }, [router]);
@@ -46,27 +46,13 @@ export default function LoginJoven() {
     setCargando(true);
 
     try {
-      const q = query(collection(db, "jovenes"), where("correo", "==", normalizarCorreo(correo)));
-      const resultado = await getDocs(q);
-
-      if (resultado.empty) {
-        alert("No encontramos ningún joven registrado con este correo.");
-      } else {
-        const datosDelJoven = resultado.docs[0].data();
-        if (datosDelJoven.estatus === "Pendiente") {
-           alert("⏳ Tu cuenta está en revisión. El IMJU validará tus documentos pronto. Te enviaremos un correo en cuanto sea aprobada.");
-           setCargando(false); return;
-        }
-
-        const idFirebase = resultado.docs[0].id; 
-        const passwordCorrecta = datosDelJoven.contrasena;
-
-        if (password === passwordCorrecta) {
-          localStorage.setItem("sesionJoven", JSON.stringify({ idFirebase, ...datosDelJoven }));
-          router.push("/tarjeta");
-        } else { alert("Contraseña incorrecta. Verifica tus datos."); }
-      }
-    } catch (error) { alert("Hubo un error al conectar con el servidor."); }
+      await authPersistenceReady;
+      await signInWithEmailAndPassword(auth, normalizarCorreo(correo), password);
+      router.push("/tarjeta");
+    } catch (error: any) {
+      console.error("Inicio de sesión joven:", error);
+      alert("No pudimos iniciar sesión. Revisa tus datos o espera el correo de aprobación si tu solicitud sigue en revisión.");
+    }
     setCargando(false);
   };
 
@@ -76,42 +62,13 @@ export default function LoginJoven() {
     setEnviandoCorreo(true);
 
     try {
-      const q = query(collection(db, "jovenes"), where("correo", "==", normalizarCorreo(correoRecuperacion)));
-      const resultado = await getDocs(q);
-
-      if (resultado.empty) {
-        alert("No encontramos ninguna cuenta vinculada a ese correo.");
-      } else {
-        const docId = resultado.docs[0].id; const datos = resultado.docs[0].data();
-        if (datos.estatus !== "Activo") {
-          alert("Tu registro todavía no está activo. Espera la validación del IMJU.");
-          setEnviandoCorreo(false);
-          return;
-        }
-
-        const nuevaPassword = generarContrasenaJoven();
-        await updateDoc(doc(db, "jovenes", docId), { contrasena: nuevaPassword });
-        try {
-          const respuesta = await fetch("/api/enviar-correo", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              tipo: "recuperacion",
-              nombre: datos.nombreCompleto.split(" ")[0],
-              correo: datos.correo,
-              password: nuevaPassword,
-            }),
-          });
-          if (!respuesta.ok) throw new Error("No fue posible enviar el correo");
-        } catch (error) {
-          // Si el correo falla, conserva la contraseña anterior para no bloquear la cuenta.
-          await updateDoc(doc(db, "jovenes", docId), { contrasena: datos.contrasena || "" });
-          throw error;
-        }
-        alert("¡Listo! Te hemos enviado un correo con las instrucciones.");
-        setVistaActual("login"); setCorreoRecuperacion("");
-      }
-    } catch (error) { alert("Hubo un error al intentar recuperar la cuenta."); }
+      await sendPasswordResetEmail(auth, normalizarCorreo(correoRecuperacion));
+      alert("¡Listo! Si tu cuenta ya fue aprobada, recibirás un enlace seguro para crear una nueva contraseña.");
+      setVistaActual("login"); setCorreoRecuperacion("");
+    } catch (error) {
+      console.error("Recuperación:", error);
+      alert("No fue posible enviar el enlace. Verifica el correo e inténtalo nuevamente.");
+    }
     setEnviandoCorreo(false);
   };
 
@@ -166,55 +123,58 @@ export default function LoginJoven() {
 
     setRegistrando(true);
     try {
-      const correoNormalizado = normalizarCorreo(regCorreo);
-      const qCheck = query(collection(db, "jovenes"), where("correo", "==", correoNormalizado));
-      const snapCheck = await getDocs(qCheck);
-      if (!snapCheck.empty) { alert("❌ Este correo ya está registrado en la plataforma."); setRegistrando(false); return; }
-
-      const identificadorArchivos = globalThis.crypto.randomUUID();
-      const fotoRef = ref(storage, `jovenes_perfiles/${identificadorArchivos}_perfil.jpg`);
-      await uploadString(fotoRef, fotoBase64, 'data_url');
-      const fotoUrl = await getDownloadURL(fotoRef);
-
-      let documentoUrl = "";
-      let documentoPath = "";
-      if (docBase64) {
-         const docRef = ref(storage, `jovenes_documentos/${identificadorArchivos}_documento.jpg`);
-         await uploadString(docRef, docBase64, 'data_url');
-         documentoUrl = await getDownloadURL(docRef);
-         documentoPath = docRef.fullPath;
-      } else if (docFile) {
-         const extension = docFile.name.includes(".") ? docFile.name.split(".").pop() : "archivo";
-         const docRef = ref(storage, `jovenes_documentos/${identificadorArchivos}_documento.${extension}`);
-         await uploadBytes(docRef, docFile);
-         documentoUrl = await getDownloadURL(docRef);
-         documentoPath = docRef.fullPath;
+      let documento = docBase64;
+      if (!documento && docFile) {
+        if (docFile.size > 2_500_000) throw new Error("El PDF debe pesar menos de 2.5 MB.");
+        documento = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result));
+          reader.onerror = reject;
+          reader.readAsDataURL(docFile);
+        });
       }
 
-      await addDoc(collection(db, "jovenes"), {
-        nombreCompleto: regNombre.trim(), fechaNacimiento: regFechaNac, 
-        genero: regGenero,
-        correo: correoNormalizado,
-        contrasena: "", codigoUnicoQR: "",
-        fotoPerfil: fotoUrl, fotoPerfilPath: fotoRef.fullPath,
-        documentoProbatorio: documentoUrl, documentoProbatorioPath: documentoPath,
-        estatus: "Pendiente", fechaRegistro: new Date().toISOString()
+      const response = await fetch("/api/registro", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tipo: "joven",
+          nombreCompleto: regNombre.trim(),
+          fechaNacimiento: regFechaNac,
+          genero: regGenero,
+          correo: normalizarCorreo(regCorreo),
+          fotoPerfil: fotoBase64,
+          documentoProbatorio: documento,
+        }),
       });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "No fue posible guardar la solicitud.");
 
-      alert("✅ ¡Registro enviado exitosamente!\n\nTu cuenta pasará a revisión por el equipo del IMJU. Te enviaremos un correo electrónico cuando tu Tarjeta Joven sea aprobada.");
+      setRegistroExitoso(true);
       setRegNombre(""); setRegFechaNac(""); setRegCorreo(""); setRegGenero("");
       setFotoBase64(null); setDocBase64(null); setDocFile(null);
-      setVistaActual("login");
 
     } catch (error: any) {
       console.error("Error registrando joven:", error);
-      alert(`No fue posible enviar tu registro: ${error?.code || error?.message || "error desconocido"}`);
+      alert(`No fue posible enviar tu registro: ${error?.message || "error desconocido"}`);
     }
     setRegistrando(false);
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-[#F3F5F9] dark:bg-slate-900 p-4 md:p-6 relative font-sans transition-colors">
+    <main className="app-shell motion-enter flex min-h-screen flex-col items-center justify-center bg-[#F3F5F9] dark:bg-slate-900 p-4 md:p-6 relative font-sans transition-colors">
+      {registroExitoso && (
+        <div className="fixed inset-0 z-[300] grid place-items-center bg-slate-950/75 p-6 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-sm overflow-hidden rounded-[2.5rem] bg-white p-8 text-center shadow-2xl">
+            <div className="brand-orb absolute -right-16 -top-16 h-44 w-44 rounded-full bg-orange-300/30 blur-3xl"></div>
+            <div className="relative mx-auto mb-5 grid h-24 w-24 place-items-center rounded-[2rem] bg-gradient-to-br from-orange-400 to-pink-500 text-5xl shadow-xl shadow-orange-200">🏆</div>
+            <p className="text-[10px] font-black uppercase tracking-[.3em] text-orange-600">Misión completada</p>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900">¡Solicitud enviada!</h2>
+            <p className="mt-3 text-sm font-medium leading-relaxed text-slate-500">El equipo del IMJU revisará tus datos. Cuando te aprueben recibirás un enlace para crear tu contraseña y activar tu QR único.</p>
+            <button onClick={() => { setRegistroExitoso(false); setVistaActual("login"); }} className="mt-7 w-full rounded-2xl bg-slate-900 py-4 text-[11px] font-black uppercase tracking-widest text-white shadow-lg active:scale-95">Entendido, ir al acceso</button>
+          </div>
+        </div>
+      )}
       
       {/* LÍNEA INSTITUCIONAL SUPERIOR */}
       <div className="absolute top-0 left-0 w-full h-1.5 flex">

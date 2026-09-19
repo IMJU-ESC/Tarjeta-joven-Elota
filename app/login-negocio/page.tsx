@@ -2,9 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { collection, query, where, getDocs, addDoc } from "firebase/firestore";
-import { ref, uploadString, getDownloadURL } from "firebase/storage";
-import { db, storage } from "../../firebase";
+import { sendPasswordResetEmail, signInWithEmailAndPassword } from "firebase/auth";
+import { auth, authPersistenceReady } from "../../firebase";
 import { normalizarCorreo } from "@/lib/credenciales";
 import dynamic from "next/dynamic";
 import "leaflet/dist/leaflet.css";
@@ -17,10 +16,12 @@ export default function LoginRegistroNegocios() {
   const router = useRouter();
   const [vista, setVista] = useState("login"); // 'login' o 'registro'
   const [cargando, setCargando] = useState(false);
+  const [registroExitoso, setRegistroExitoso] = useState(false);
 
   // Estados Login
   const [correoLogin, setCorreoLogin] = useState("");
   const [passLogin, setPassLogin] = useState("");
+  const [recuperando, setRecuperando] = useState(false);
 
   // Estados Registro
   const centroElota = { lat: 23.92173, lng: -106.89264 };
@@ -79,27 +80,12 @@ export default function LoginRegistroNegocios() {
     e.preventDefault();
     setCargando(true);
     try {
-      const q = query(collection(db, "negocios"), where("correo", "==", normalizarCorreo(correoLogin)));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const documentoNegocio = snap.docs[0];
-        const datosNegocio: any = { idFirebase: documentoNegocio.id, ...documentoNegocio.data() };
-
-        if (datosNegocio.estatus === "Pendiente") {
-          alert("⏳ Tu solicitud aún está en revisión por el Instituto. Recibirás tu contraseña por correo cuando sea aprobada.");
-        } else if (datosNegocio.estatus !== "Activo") {
-          alert("Tu cuenta de negocio no está activa. Comunícate con el IMJU.");
-        } else if (datosNegocio.contrasena === passLogin) {
-          localStorage.setItem("sesionNegocio", JSON.stringify(datosNegocio));
-          router.push("/portal-negocios");
-        } else {
-          alert("❌ Contraseña incorrecta.");
-        }
-      } else {
-        alert("❌ Este correo no está registrado como negocio aliado.");
-      }
+      await authPersistenceReady;
+      await signInWithEmailAndPassword(auth, normalizarCorreo(correoLogin), passLogin);
+      router.push("/portal-negocios");
     } catch (error) {
-      alert("Hubo un error al iniciar sesión.");
+      console.error("Inicio de sesión negocio:", error);
+      alert("No pudimos iniciar sesión. Revisa tus datos o espera el correo de aprobación si tu solicitud sigue en revisión.");
     }
     setCargando(false);
   };
@@ -113,48 +99,53 @@ export default function LoginRegistroNegocios() {
 
     setCargando(true);
     try {
-      const correoNormalizado = normalizarCorreo(correoReg);
-      const q = query(collection(db, "negocios"), where("correo", "==", correoNormalizado));
-      if (!(await getDocs(q)).empty) { alert("¡Ese correo ya está registrado en el sistema!"); setCargando(false); return; }
-
-      // Subir imágenes a Storage
-      let urlLogo = logoBase64;
-      let urlEvidencia = evidenciaBase64;
-      
-      const identificadorArchivos = globalThis.crypto.randomUUID();
-      const logoRef = ref(storage, `negocios_logos/${identificadorArchivos}_logo.jpg`);
-      await uploadString(logoRef, logoBase64, 'data_url');
-      urlLogo = await getDownloadURL(logoRef);
-
-      const evidenciaRef = ref(storage, `negocios_evidencias/${identificadorArchivos}_evidencia.jpg`);
-      await uploadString(evidenciaRef, evidenciaBase64, 'data_url');
-      urlEvidencia = await getDownloadURL(evidenciaRef);
-
-      await addDoc(collection(db, "negocios"), {
-        nombreComercial: nombre.trim(), giro: giro.trim(), correo: correoNormalizado,
-        contrasena: "", logo: urlLogo, logoPath: logoRef.fullPath,
-        evidenciaFachada: urlEvidencia, evidenciaFachadaPath: evidenciaRef.fullPath,
-        lat: lat, lng: lng, horario: horario.trim(), telefono: telefono.trim(),
-        estatus: "Pendiente", fechaRegistro: new Date().toISOString(),
-        aceptoTerminos: true // Registro legal en base de datos
+      const response = await fetch("/api/registro", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tipo: "negocio",
+          nombreComercial: nombre.trim(),
+          giro: giro.trim(),
+          correo: normalizarCorreo(correoReg),
+          logo: logoBase64,
+          evidenciaFachada: evidenciaBase64,
+          lat,
+          lng,
+          horario: horario.trim(),
+          telefono: telefono.trim(),
+          aceptoTerminos: true,
+        }),
       });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "No fue posible enviar la solicitud.");
 
-      alert("✅ ¡Solicitud enviada con éxito! El IMJU revisará tu información y la evidencia fotográfica. Recibirás un correo de confirmación con tus accesos en cuanto sea aprobada.");
+      setRegistroExitoso(true);
       
       // Limpiar formulario y regresar al login
       setNombre(""); setGiro(""); setHorario(""); setTelefono(""); setCorreoReg("");
       setLogoBase64(null); setEvidenciaBase64(null); setAceptaTerminos(false);
-      setVista("login");
       
     } catch (error: any) {
       console.error("Error registrando negocio:", error);
-      alert(`No fue posible enviar la solicitud: ${error?.code || error?.message || "error desconocido"}`);
+      alert(`No fue posible enviar la solicitud: ${error?.message || "error desconocido"}`);
     }
     setCargando(false);
   };
 
   return (
-    <main className="min-h-screen bg-[#F3F5F9] font-sans selection:bg-emerald-500/30">
+    <main className="app-shell motion-enter min-h-screen bg-[#F3F5F9] font-sans selection:bg-emerald-500/30">
+      {registroExitoso && (
+        <div className="fixed inset-0 z-[300] grid place-items-center bg-slate-950/75 p-6 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-sm overflow-hidden rounded-[2.5rem] bg-white p-8 text-center shadow-2xl">
+            <div className="brand-orb absolute -left-16 -top-16 h-44 w-44 rounded-full bg-emerald-300/30 blur-3xl"></div>
+            <div className="relative mx-auto mb-5 grid h-24 w-24 place-items-center rounded-[2rem] bg-gradient-to-br from-emerald-400 to-cyan-500 text-5xl shadow-xl shadow-emerald-200">🚀</div>
+            <p className="text-[10px] font-black uppercase tracking-[.3em] text-emerald-600">Nuevo aliado en camino</p>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900">¡Solicitud recibida!</h2>
+            <p className="mt-3 text-sm font-medium leading-relaxed text-slate-500">Revisaremos el negocio y su evidencia. Al aprobarse llegará un enlace seguro para crear la contraseña del portal.</p>
+            <button onClick={() => { setRegistroExitoso(false); setVista("login"); }} className="mt-7 w-full rounded-2xl bg-emerald-600 py-4 text-[11px] font-black uppercase tracking-widest text-white shadow-lg active:scale-95">Entendido, ir al acceso</button>
+          </div>
+        </div>
+      )}
       <div className="flex min-h-screen">
         
         {/* LADO IZQUIERDO: DECORATIVO */}
@@ -192,6 +183,18 @@ export default function LoginRegistroNegocios() {
                 <input type="password" value={passLogin} onChange={e => setPassLogin(e.target.value)} placeholder="Contraseña de Acceso" className="w-full bg-white border-2 border-slate-100 rounded-2xl px-6 py-4.5 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 transition-all shadow-sm" required />
                 <button type="submit" disabled={cargando} className={`w-full font-black py-5 rounded-[1.5rem] text-[11px] uppercase tracking-widest transition-all shadow-xl mt-4 ${cargando ? "bg-slate-400 text-white" : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30 active:scale-95"}`}>
                   {cargando ? "Verificando..." : "Acceder al Portal"}
+                </button>
+                <button type="button" disabled={recuperando || !correoLogin} onClick={async () => {
+                  setRecuperando(true);
+                  try {
+                    await sendPasswordResetEmail(auth, normalizarCorreo(correoLogin));
+                    alert("Si tu negocio ya fue aprobado, recibirás un enlace seguro para crear una nueva contraseña.");
+                  } catch (error) {
+                    console.error(error);
+                    alert("No fue posible enviar el enlace. Verifica el correo.");
+                  } finally { setRecuperando(false); }
+                }} className="w-full text-xs font-black text-emerald-700 hover:text-emerald-900 disabled:opacity-40">
+                  {recuperando ? "Enviando enlace..." : "¿Olvidaste tu contraseña?"}
                 </button>
               </form>
             ) : (

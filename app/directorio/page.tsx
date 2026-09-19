@@ -44,7 +44,7 @@ export default function DirectorioNegocios() {
     setCargando(true);
     try {
       // 1. Cargar todos los negocios
-      const snapNegocios = await getDocs(collection(db, "negocios"));
+      const snapNegocios = await getDocs(query(collection(db, "negocios"), where("estatus", "==", "Activo")));
       const tempNegocios: any[] = [];
       snapNegocios.forEach((doc) => {
         tempNegocios.push({ idFirebase: doc.id, ...doc.data() });
@@ -52,7 +52,7 @@ export default function DirectorioNegocios() {
       setNegocios(tempNegocios);
 
       // 2. Cargar todas las promociones activas en la plataforma
-      const snapPromos = await getDocs(collection(db, "promociones"));
+      const snapPromos = await getDocs(query(collection(db, "promociones"), where("estatus", "==", "Activa")));
       const tempPromos: any[] = [];
       snapPromos.forEach((doc) => {
         tempPromos.push({ idFirebase: doc.id, ...doc.data() });

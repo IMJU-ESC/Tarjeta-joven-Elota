@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { collection, query, where, getDocs, addDoc, deleteDoc, doc, updateDoc, setDoc } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "../../firebase"; 
+import { collection, query, where, getDocs, addDoc, deleteDoc, doc, updateDoc, setDoc, getDoc } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+import { EmailAuthProvider, onAuthStateChanged, reauthenticateWithCredential, signOut, updatePassword } from "firebase/auth";
+import { auth, db, storage } from "../../firebase"; 
 import dynamic from "next/dynamic";
 import imageCompression from 'browser-image-compression';
 import "leaflet/dist/leaflet.css";
@@ -33,6 +34,7 @@ export default function PortalNegocios() {
   const [modoEscaner, setModoEscaner] = useState(false);
   const [jovenEscaneado, setJovenEscaneado] = useState<any>(null);
   const [buscando, setBuscando] = useState(false);
+  const [mensajeEscaner, setMensajeEscaner] = useState("Enfoca el QR dentro del recuadro");
   const [registrandoVisita, setRegistrandoVisita] = useState(false);
   const [promoAplicada, setPromoAplicada] = useState("");
 
@@ -81,7 +83,7 @@ export default function PortalNegocios() {
   const [editLat, setEditLat] = useState(23.92173);
   const [editLng, setEditLng] = useState(-106.89264);
 
-  const [modalAuth, setModalAuth] = useState<{abierto: boolean, accion: Function | null}>({abierto: false, accion: null});
+  const [modalAuth, setModalAuth] = useState<{abierto: boolean, accion: (() => void | Promise<void>) | null}>({abierto: false, accion: null});
   const [passAuth, setPassAuth] = useState("");
   const [ultimaVisitaId, setUltimaVisitaId] = useState<string | null>(null);
   const [avisos, setAvisos] = useState<any[]>([]); 
@@ -89,6 +91,8 @@ export default function PortalNegocios() {
   const [avisosNoLeidos, setAvisosNoLeidos] = useState(0);
 
   const [imagenCompleta, setImagenCompleta] = useState<string | null>(null);
+  const [modalRutaAliado, setModalRutaAliado] = useState(false);
+  const [modalMisionesAliado, setModalMisionesAliado] = useState(false);
 
   const router = useRouter();
   const audioExito = useRef<HTMLAudioElement | null>(null);
@@ -121,14 +125,24 @@ export default function PortalNegocios() {
   }, []);
 
   useEffect(() => {
-    const sesionGuardada = localStorage.getItem("sesionNegocio");
-    if (sesionGuardada) { 
-       const parsed = JSON.parse(sesionGuardada);
-       setDatosNegocio(parsed); 
-       setMenuPreview(parsed.menuImagen || null); 
-    } else { 
-       router.push("/login-negocio"); 
-    }
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) { router.replace("/login-negocio"); return; }
+      try {
+        const businessSnap = await getDoc(doc(db, "negocios", user.uid));
+        if (!businessSnap.exists() || businessSnap.data().estatus !== "Activo") {
+          await signOut(auth);
+          router.replace("/login-negocio");
+          return;
+        }
+        const business = { idFirebase: businessSnap.id, ...businessSnap.data() };
+        setDatosNegocio(business);
+        setMenuPreview((business as any).menuImagen || null);
+      } catch (error) {
+        console.error("Sesión de negocio:", error);
+        await signOut(auth);
+        router.replace("/login-negocio");
+      }
+    });
     
     const temaGuardado = localStorage.getItem("temaNegocios");
     if (temaGuardado === "oscuro") {
@@ -140,10 +154,23 @@ export default function PortalNegocios() {
 
     audioExito.current = new Audio("https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3");
     audioError.current = new Audio("https://assets.mixkit.co/active_storage/sfx/2572/2572-preview.mp3");
+    return () => unsubscribe();
   }, [router]);
 
   useEffect(() => { if (datosNegocio) { cargarEstadisticas(); cargarEmpleos(); cargarPromos(); cargarAvisos(); } }, [pestañaActiva, datosNegocio]);
   useEffect(() => { if (ultimaVisitaId) { const timer = setTimeout(() => setUltimaVisitaId(null), 8000); return () => clearTimeout(timer); } }, [ultimaVisitaId]);
+  useEffect(() => {
+    if (!datosNegocio) return;
+    const completas = Boolean(datosNegocio.logo && datosNegocio.telefono && datosNegocio.horario)
+      && listaPromos.length > 0
+      && listaEmpleos.length > 0
+      && historialVisitas.length > 0;
+    const key = `recompensa_ruta_aliado_${datosNegocio.idFirebase}`;
+    if (completas && !localStorage.getItem(key)) {
+      localStorage.setItem(key, new Date().toISOString());
+      setModalRutaAliado(true);
+    }
+  }, [datosNegocio, listaPromos.length, listaEmpleos.length, historialVisitas.length]);
 
   const alternarTema = () => {
     if (modoOscuro) {
@@ -157,8 +184,8 @@ export default function PortalNegocios() {
     }
   };
 
-  const cerrarSesion = () => {
-    localStorage.removeItem("sesionNegocio");
+  const cerrarSesion = async () => {
+    await signOut(auth);
     setModalAjustes(false);
     router.replace("/");
     setTimeout(() => {
@@ -169,30 +196,42 @@ export default function PortalNegocios() {
   const iniciarEscaner = () => {
     if (audioExito.current) { audioExito.current.play().then(() => { audioExito.current!.pause(); audioExito.current!.currentTime = 0; }).catch(()=>{}); }
     if (audioError.current) { audioError.current.play().then(() => { audioError.current!.pause(); audioError.current!.currentTime = 0; }).catch(()=>{}); }
+    setMensajeEscaner("Enfoca el QR dentro del recuadro");
     setModoEscaner(true);
   };
 
   const procesarQR = async (codigoQR: string) => {
     if (buscando) return; 
+    const codigoLimpio = codigoQR.trim().toUpperCase();
+    if (!codigoLimpio) return;
     setBuscando(true);
+    setMensajeEscaner("Validando tarjeta…");
     
     if (typeof window !== "undefined" && navigator.vibrate) {
       navigator.vibrate(150); 
     }
 
     try {
-      const res = await getDocs(query(collection(db, "jovenes"), where("codigoUnicoQR", "==", codigoQR)));
+      // Una sola condición evita requerir un índice compuesto de Firestore.
+      const res = await getDocs(query(collection(db, "tarjetas"), where("codigoUnicoQR", "==", codigoLimpio)));
       if (res.empty) { 
          audioError.current?.play().catch(()=>{}); 
-         alert("❌ Código no válido."); 
+         setMensajeEscaner("No encontramos ese QR. Ajusta la distancia y vuelve a enfocarlo.");
+         alert("❌ No encontramos una Tarjeta Joven activa con ese código."); 
          setModoEscaner(true); 
       } else {
         let dataJoven: any = { idFirebase: res.docs[0].id, ...res.docs[0].data() };
-        const snapVisitas = await getDocs(query(collection(db, "visitas"), where("idJoven", "==", dataJoven.idFirebase)));
+        if (dataJoven.estatus !== "Activo") throw new Error("La tarjeta todavía no está activa.");
+        // El negocio solo puede leer sus propias visitas. Consultar por ownerUid
+        // mantiene las reglas cerradas y evita el error permission-denied.
+        const negocioUid = auth.currentUser?.uid;
+        if (!negocioUid) throw new Error("La sesión del negocio ya no está disponible.");
+        const snapVisitas = await getDocs(query(collection(db, "visitas"), where("ownerUid", "==", negocioUid)));
         
         const fechaActual = new Date(); let visitasActivas = 0;
         snapVisitas.forEach(v => {
           const d = v.data();
+          if (d.youthUid !== dataJoven.idFirebase) return;
           const diasTranscurridos = (fechaActual.getTime() - new Date(d.fecha).getTime()) / (1000 * 3600 * 24);
           if (diasTranscurridos <= 90) visitasActivas++;
         });
@@ -213,20 +252,28 @@ export default function PortalNegocios() {
         setPromoAplicada(""); 
         setModoEscaner(false);
       }
-    } catch (error) { 
+    } catch (error: any) { 
       audioError.current?.play().catch(()=>{}); 
+      console.error("Validación QR:", error);
+      setMensajeEscaner("No se pudo validar. Revisa tu conexión y vuelve a enfocar el QR.");
+      alert(`No se pudo validar el QR: ${error?.message || "error desconocido"}`);
     }
     setBuscando(false);
   };
 
-  const solicitarAutorizacion = (accionBloqueada: Function) => { setModalAuth({ abierto: true, accion: accionBloqueada }); };
+  const solicitarAutorizacion = (accionBloqueada: () => void | Promise<void>) => { setModalAuth({ abierto: true, accion: accionBloqueada }); };
 
-  const verificarAutorizacion = (e: React.FormEvent) => {
+  const verificarAutorizacion = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (passAuth === datosNegocio.contrasena) {
+    try {
+      const user = auth.currentUser;
+      if (!user?.email) throw new Error("Sesión no disponible");
+      await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, passAuth));
       if (modalAuth.accion) modalAuth.accion();
       setModalAuth({ abierto: false, accion: null }); setPassAuth("");
-    } else { alert("❌ Contraseña de dueño incorrecta."); setPassAuth(""); }
+    } catch {
+      alert("❌ Contraseña de dueño incorrecta."); setPassAuth("");
+    }
   };
 
   const cargarAvisos = async () => {
@@ -253,7 +300,7 @@ export default function PortalNegocios() {
   const cargarEstadisticas = async () => {
     if (!datosNegocio) return;
     setCargandoMetricas(true);
-    const snap = await getDocs(query(collection(db, "visitas"), where("idNegocio", "==", datosNegocio.idFirebase)));
+    const snap = await getDocs(query(collection(db, "visitas"), where("ownerUid", "==", datosNegocio.idFirebase)));
     const temp: any[] = [];
     snap.forEach((doc) => temp.push({ idVisita: doc.id, ...doc.data() }));
     temp.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
@@ -261,12 +308,12 @@ export default function PortalNegocios() {
   };
 
   const cargarEmpleos = async () => {
-    const snap = await getDocs(query(collection(db, "empleos"), where("idNegocio", "==", datosNegocio.idFirebase)));
+    const snap = await getDocs(query(collection(db, "empleos"), where("ownerUid", "==", datosNegocio.idFirebase)));
     const temp: any[] = []; snap.forEach((d) => temp.push({ idFirebase: d.id, ...d.data() })); setListaEmpleos(temp);
   };
 
   const cargarPromos = async () => {
-    const snap = await getDocs(query(collection(db, "promociones"), where("idNegocio", "==", datosNegocio.idFirebase)));
+    const snap = await getDocs(query(collection(db, "promociones"), where("ownerUid", "==", datosNegocio.idFirebase)));
     const temp: any[] = []; snap.forEach((d) => temp.push({ idFirebase: d.id, ...d.data() })); setListaPromos(temp);
   };
 
@@ -305,7 +352,7 @@ export default function PortalNegocios() {
 
     try {
       const docRef = await addDoc(collection(db, "visitas"), {
-        idNegocio: datosNegocio.idFirebase, nombreNegocio: datosNegocio.nombreComercial, idJoven: jovenEscaneado.idFirebase, nombreJoven: jovenEscaneado.nombreCompleto,
+        ownerUid: auth.currentUser!.uid, youthUid: jovenEscaneado.idFirebase, idNegocio: datosNegocio.idFirebase, nombreNegocio: datosNegocio.nombreComercial, idJoven: jovenEscaneado.idFirebase, nombreJoven: jovenEscaneado.nombreCompleto,
         generoJoven: jovenEscaneado.genero || "No especificado", idPromo: promoAplicada || "ninguna", nombrePromo: p ? p.titulo : "Visita estándar", fecha: new Date().toISOString()
       });
       audioExito.current?.play().catch(()=>{}); setJovenEscaneado(null); setPromoAplicada(""); setUltimaVisitaId(docRef.id); cargarEstadisticas();
@@ -363,7 +410,7 @@ export default function PortalNegocios() {
     try {
       let nuevaUrlLogo = datosNegocio.logo;
       if (editLogoFile) {
-         const storageRef = ref(storage, `negocios_logos/${Date.now()}_${editLogoFile.name}`); await uploadBytes(storageRef, editLogoFile); nuevaUrlLogo = await getDownloadURL(storageRef);
+         const storageRef = ref(storage, `negocios_logos/${auth.currentUser!.uid}/${Date.now()}_${editLogoFile.name}`); await uploadBytes(storageRef, editLogoFile); nuevaUrlLogo = await getDownloadURL(storageRef);
       }
       
       await updateDoc(doc(db, "negocios", datosNegocio.idFirebase), { 
@@ -389,7 +436,7 @@ export default function PortalNegocios() {
           telefono: editTelefono.trim()
       };
 
-      localStorage.setItem("sesionNegocio", JSON.stringify(datosActualizados)); setDatosNegocio(datosActualizados);
+      setDatosNegocio(datosActualizados);
       alert("✅ Perfil actualizado exitosamente en el Directorio."); setModalEditarPerfil(false);
     } catch (error) { alert("Error al actualizar el perfil."); }
     setGuardandoPerfil(false);
@@ -398,7 +445,7 @@ export default function PortalNegocios() {
   const publicarEmpleo = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await addDoc(collection(db, "empleos"), { idNegocio: datosNegocio.idFirebase, nombreNegocio: datosNegocio.nombreComercial, logoNegocio: datosNegocio.logo || null, titulo: titulo.trim(), sueldo: sueldo.trim(), tipo: tipoEmpleo, descripcion: descripcion.trim(), telefonoContacto: telefono.trim(), direccion: direccion.trim(), estatus: "Activa", fechaPublicacion: new Date().toISOString() });
+      await addDoc(collection(db, "empleos"), { ownerUid: auth.currentUser!.uid, idNegocio: datosNegocio.idFirebase, nombreNegocio: datosNegocio.nombreComercial, logoNegocio: datosNegocio.logo || null, titulo: titulo.trim(), sueldo: sueldo.trim(), tipo: tipoEmpleo, descripcion: descripcion.trim(), telefonoContacto: telefono.trim(), direccion: direccion.trim(), estatus: "Activa", fechaPublicacion: new Date().toISOString() });
       
       await actualizarCentinela(); // DISPARAMOS CENTINELA
       
@@ -410,9 +457,9 @@ export default function PortalNegocios() {
     e.preventDefault(); setPublicandoPromo(true);
     try {
       let imageUrl = null;
-      if (imgPromoFile) { const storageRef = ref(storage, `promociones/${Date.now()}_${imgPromoFile.name}`); await uploadBytes(storageRef, imgPromoFile); imageUrl = await getDownloadURL(storageRef); }
+      if (imgPromoFile) { const storageRef = ref(storage, `promociones/${auth.currentUser!.uid}/${Date.now()}_${imgPromoFile.name}`); await uploadBytes(storageRef, imgPromoFile); imageUrl = await getDownloadURL(storageRef); }
       await addDoc(collection(db, "promociones"), {
-        idNegocio: datosNegocio.idFirebase, nombreNegocio: datosNegocio.nombreComercial, logoNegocio: datosNegocio.logo || null, titulo: titulo.trim(), tipo: tipoPromo, descripcion: descripcion.trim(), direccion: direccion.trim(), visitasMeta: tipoPromo === "Frecuente" ? parseInt(visitasRequeridas) : null, diasValidos: diasValidos, fechaVencimiento: fechaVencimiento || null, usoUnico: tipoPromo === "Directa" ? usoUnico : false, nivelRequerido: nivelRequerido, imagen: imageUrl, estatus: "Activa", fechaPublicacion: new Date().toISOString()
+        ownerUid: auth.currentUser!.uid, idNegocio: datosNegocio.idFirebase, nombreNegocio: datosNegocio.nombreComercial, logoNegocio: datosNegocio.logo || null, titulo: titulo.trim(), tipo: tipoPromo, descripcion: descripcion.trim(), direccion: direccion.trim(), visitasMeta: tipoPromo === "Frecuente" ? parseInt(visitasRequeridas) : null, diasValidos: diasValidos, fechaVencimiento: fechaVencimiento || null, usoUnico: tipoPromo === "Directa" ? usoUnico : false, nivelRequerido: nivelRequerido, imagen: imageUrl, estatus: "Activa", fechaPublicacion: new Date().toISOString()
       });
       
       await actualizarCentinela(); // DISPARAMOS CENTINELA
@@ -426,13 +473,14 @@ export default function PortalNegocios() {
     if (!menuFile) { alert("Selecciona una imagen de menú."); return; }
     setGuardandoMenu(true);
     try {
-      const storageRef = ref(storage, `menus/${Date.now()}_${menuFile.name}`); await uploadBytes(storageRef, menuFile); const menuUrl = await getDownloadURL(storageRef);
+      const storageRef = ref(storage, `menus/${auth.currentUser!.uid}/${Date.now()}_${menuFile.name}`); await uploadBytes(storageRef, menuFile); const menuUrl = await getDownloadURL(storageRef);
       await updateDoc(doc(db, "negocios", datosNegocio.idFirebase), { menuImagen: menuUrl });
+      if (datosNegocio.menuImagen) await deleteObject(ref(storage, datosNegocio.menuImagen)).catch(() => undefined);
       
       await actualizarCentinela(); // DISPARAMOS CENTINELA
 
       const datosActualizados = { ...datosNegocio, menuImagen: menuUrl };
-      localStorage.setItem("sesionNegocio", JSON.stringify(datosActualizados)); setDatosNegocio(datosActualizados); setMenuFile(null);
+      setDatosNegocio(datosActualizados); setMenuFile(null);
       alert("¡Menú actualizado y visible en el directorio!");
     } catch (error) { alert("Hubo un error al guardar el menú."); }
     setGuardandoMenu(false);
@@ -442,6 +490,9 @@ export default function PortalNegocios() {
   const eliminarPublicacion = async (item: any, coleccion: string) => {
     if(window.confirm("¿Seguro que deseas eliminar esta publicación permanentemente?")) {
       try {
+        if (coleccion === "promociones" && item.imagen) {
+          await deleteObject(ref(storage, item.imagen)).catch(() => undefined);
+        }
         await deleteDoc(doc(db, coleccion, item.idFirebase));
         await actualizarCentinela(); // DISPARAMOS CENTINELA
         
@@ -456,13 +507,13 @@ export default function PortalNegocios() {
 
   const actualizarContrasena = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (contrasenaActualInput !== datosNegocio.contrasena) { alert("❌ Contraseña actual incorrecta."); return; }
     if (nuevaContrasena.length < 6) { alert("La nueva contraseña debe tener al menos 6 caracteres."); return; }
     setCambiandoPass(true);
     try {
-      await updateDoc(doc(db, "negocios", datosNegocio.idFirebase), { contrasena: nuevaContrasena });
-      const datosActualizados = { ...datosNegocio, contrasena: nuevaContrasena };
-      localStorage.setItem("sesionNegocio", JSON.stringify(datosActualizados)); setDatosNegocio(datosActualizados);
+      const user = auth.currentUser;
+      if (!user?.email) throw new Error("Sesión no disponible");
+      await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, contrasenaActualInput));
+      await updatePassword(user, nuevaContrasena);
       alert("✅ ¡Contraseña actualizada!"); setModalAjustes(false); setContrasenaActualInput(""); setNuevaContrasena("");
     } catch (error) { alert("Error al actualizar."); }
     setCambiandoPass(false);
@@ -483,8 +534,86 @@ export default function PortalNegocios() {
 
   if (!datosNegocio) return null;
 
+  const misionesCompletadas = [
+    Boolean(datosNegocio.logo && datosNegocio.telefono && datosNegocio.horario),
+    listaPromos.length > 0,
+    listaEmpleos.length > 0,
+    historialVisitas.length > 0,
+  ].filter(Boolean).length;
+  const progresoAliado = misionesCompletadas * 25;
+  const rutaAliadoCompleta = misionesCompletadas === 4;
+  const metaImpacto = Math.min(historialVisitas.length, 10);
+  const misionesAliado = [
+    {
+      id: "perfil",
+      icon: "🏪",
+      title: "Perfil irresistible",
+      description: "Logo, horario y WhatsApp completos",
+      complete: Boolean(datosNegocio.logo && datosNegocio.telefono && datosNegocio.horario),
+      action: abrirEditarPerfil,
+      label: "Editar perfil",
+    },
+    {
+      id: "promo",
+      icon: "🎟️",
+      title: "Primer beneficio",
+      description: "Publica una promoción para jóvenes",
+      complete: listaPromos.length > 0,
+      action: () => solicitarAutorizacion(() => { setPestañaActiva("promos"); setCreandoModal("promo"); }),
+      label: "Crear beneficio",
+    },
+    {
+      id: "empleo",
+      icon: "💼",
+      title: "Abre una oportunidad",
+      description: "Comparte una vacante juvenil",
+      complete: listaEmpleos.length > 0,
+      action: () => solicitarAutorizacion(() => { setPestañaActiva("empleos"); setCreandoModal("empleo"); }),
+      label: "Publicar vacante",
+    },
+    {
+      id: "visita",
+      icon: "⚡",
+      title: "Primera conexión",
+      description: "Escanea una Tarjeta Joven",
+      complete: historialVisitas.length > 0,
+      action: () => { setPestañaActiva("escaner"); setTimeout(iniciarEscaner, 100); },
+      label: "Abrir escáner",
+    },
+  ];
+
   return (
-    <main className={`min-h-screen pb-32 font-sans selection:bg-emerald-500/30 relative transition-colors duration-300 ${modoOscuro ? 'bg-slate-900 text-slate-100' : 'bg-[#F3F5F9] text-slate-900'}`}>
+    <main className={`app-shell motion-enter min-h-screen pb-32 font-sans selection:bg-emerald-500/30 relative transition-colors duration-300 ${modoOscuro ? 'bg-slate-900 text-slate-100' : 'bg-[#F5FBF8] text-slate-900'}`}>
+
+      {modalRutaAliado && (
+        <div className="fixed inset-0 z-[400] grid place-items-center overflow-hidden bg-slate-950/85 p-5 backdrop-blur-md" onClick={() => setModalRutaAliado(false)}>
+          {["#34d399", "#22d3ee", "#f4c425", "#f58220", "#a78bfa", "#f70476"].map((color, index) => (
+            <span key={color} className="celebration-spark top-0" style={{ left: `${14 + index * 14}%`, background: color, animationDelay: `${index * .18}s`, ["--spark-x" as string]: `${index % 2 ? 35 : -30}px` }}></span>
+          ))}
+          <section className="motion-enter relative w-full max-w-sm overflow-hidden rounded-[2.7rem] border border-white/10 bg-gradient-to-br from-emerald-950 to-[#080d18] p-7 text-center text-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="brand-orb absolute -right-16 -top-16 h-48 w-48 rounded-full bg-emerald-400/20 blur-3xl"></div>
+            <div className="relative mx-auto grid h-28 w-28 place-items-center rounded-[2.3rem] bg-gradient-to-br from-emerald-400 via-cyan-500 to-blue-600 text-6xl shadow-xl shadow-emerald-950/40">🏆</div>
+            <p className="relative mt-6 text-[9px] font-black uppercase tracking-[.3em] text-emerald-300">Ruta del aliado completada</p>
+            <h2 className="relative mt-2 text-3xl font-black tracking-tight">¡Aliado Fundador!</h2>
+            <p className="relative mt-3 text-sm font-medium leading-6 text-slate-300">Tu perfil ya está activo, publicaste oportunidades y conectaste con tu primer joven.</p>
+            <div className="relative mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-left"><div className="flex items-center justify-between"><div><p className="text-[9px] font-black uppercase tracking-widest text-cyan-300">Nueva meta de impacto</p><p className="mt-1 text-sm font-black">Alcanza 10 validaciones</p></div><span className="text-3xl">📈</span></div></div>
+            <button onClick={() => setModalRutaAliado(false)} className="shine-sweep relative mt-6 w-full overflow-hidden rounded-2xl bg-white py-4 text-[10px] font-black uppercase tracking-widest text-slate-900 active:scale-[.98]">Ir a mi portal</button>
+          </section>
+        </div>
+      )}
+
+      {modalMisionesAliado && (
+        <div className="fixed inset-0 z-[350] flex items-end justify-center bg-slate-950/70 p-0 backdrop-blur-sm sm:items-center sm:p-5" onClick={() => setModalMisionesAliado(false)}>
+          <section className="motion-enter max-h-[88vh] w-full max-w-2xl overflow-y-auto rounded-t-[2.3rem] border border-white/10 bg-gradient-to-br from-slate-950 to-emerald-950 p-5 text-white shadow-2xl sm:rounded-[2.3rem] sm:p-7" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-4"><div><p className="text-[9px] font-black uppercase tracking-[.24em] text-emerald-300">Ruta del aliado</p><h2 className="mt-1 text-2xl font-black">Misiones del negocio</h2><p className="mt-1 text-xs font-medium text-slate-400">Estas tareas ayudan a que tu perfil tenga más actividad.</p></div><button onClick={() => setModalMisionesAliado(false)} className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/10" aria-label="Cerrar misiones">✕</button></div>
+            <div className="mt-5 flex items-center gap-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-600 p-4"><div className="min-w-0 flex-1"><p className="text-[9px] font-black uppercase tracking-widest text-emerald-50">Progreso total</p><div className="mt-2 h-2 overflow-hidden rounded-full bg-white/20"><div className="h-full rounded-full bg-white transition-all duration-700" style={{ width: `${progresoAliado}%` }}></div></div></div><div className="text-right"><strong className="block text-xl">{progresoAliado} XP</strong><span className="text-[9px] font-bold">{misionesCompletadas}/4 listas</span></div></div>
+            {rutaAliadoCompleta && <div className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4"><div className="flex items-center justify-between gap-4"><div><p className="text-[9px] font-black uppercase tracking-[.18em] text-emerald-300">🏆 Aliado Fundador</p><p className="mt-1 text-xs font-medium text-slate-400">Meta de impacto: diez validaciones.</p></div><strong className="text-lg text-emerald-300">{metaImpacto}/10</strong></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-cyan-400" style={{ width: `${metaImpacto * 10}%` }}></div></div></div>}
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              {misionesAliado.map((mission) => <button key={mission.id} onClick={() => { setModalMisionesAliado(false); setTimeout(mission.action, 160); }} className={`rounded-2xl border p-4 text-left transition active:scale-[.98] ${mission.complete ? "border-emerald-400/30 bg-emerald-400/10" : "border-white/10 bg-white/5"}`}><div className="flex items-center justify-between"><span className="text-2xl">{mission.complete ? "✅" : mission.icon}</span><span className={`rounded-full px-2 py-1 text-[8px] font-black ${mission.complete ? "bg-emerald-400 text-emerald-950" : "bg-white/10 text-slate-300"}`}>{mission.complete ? "LISTA" : "+25 XP"}</span></div><h3 className="mt-3 text-sm font-black">{mission.title}</h3><p className="mt-1 text-[10px] font-medium text-slate-400">{mission.description}</p><span className="mt-3 inline-block text-[8px] font-black uppercase tracking-widest text-emerald-300">{mission.label} →</span></button>)}
+            </div>
+          </section>
+        </div>
+      )}
 
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes shimmer { 0% { transform: translateX(-150%); } 100% { transform: translateX(150%); } }
@@ -535,13 +664,14 @@ export default function PortalNegocios() {
       )}
 
       {/* HEADER */}
-      <div className="pt-6 pb-6 px-6 max-w-md mx-auto flex justify-between items-center">
-        <div className="flex items-center gap-4">
-          <div className="bg-white dark:bg-slate-800 p-2 rounded-2xl shadow-lg border border-slate-100 dark:border-slate-700 flex items-center justify-center">
-             <img src={datosNegocio.logo || "/imju-elota.webp"} alt="IMJU" className="w-10 h-10 object-contain" />
+      <div className="brand-header-card mx-4 mt-4 mb-6 max-w-md p-4 sm:mx-auto">
+      <div className="flex justify-between items-center">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="brand-logo-stage">
+             <img src={datosNegocio.logo || "/imju-elota.webp"} alt={datosNegocio.nombreComercial || "Negocio aliado"} />
           </div>
-          <div>
-            <p className="text-[#D65F08] dark:text-orange-400 text-[11px] font-black uppercase tracking-widest mb-0.5">Portal Aliado</p>
+          <div className="min-w-0">
+            <p className="mb-1 bg-gradient-to-r from-emerald-500 via-cyan-500 to-orange-500 bg-clip-text text-[9px] font-black uppercase tracking-[.22em] text-transparent">Aliado Tarjeta Joven</p>
             <h1 className="text-xl font-black text-slate-900 dark:text-white tracking-tighter truncate max-w-[150px] leading-tight">{datosNegocio.nombreComercial}</h1>
           </div>
         </div>
@@ -559,14 +689,25 @@ export default function PortalNegocios() {
           <button onClick={() => setModalAjustes(true)} className="w-11 h-11 bg-white dark:bg-slate-800 rounded-[1.2rem] flex items-center justify-center shadow-md border border-slate-100 dark:border-slate-700 text-slate-400 dark:text-slate-300 hover:text-slate-800 dark:hover:text-white transition-colors">⚙️</button>
         </div>
       </div>
+      </div>
 
-      <div className="max-w-md mx-auto px-6 mt-4 relative z-20">
+      <div className="mx-auto w-full max-w-md">
+      <div className="w-full px-6 mb-4">
+        <button onClick={() => setModalMisionesAliado(true)} className="brand-mini-card interactive-card flex w-full items-center gap-4 rounded-2xl p-3.5 text-left">
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-500 text-xl text-white">{rutaAliadoCompleta ? "🏆" : "⚡"}</div>
+          <div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-3"><p className="truncate text-xs font-black text-slate-900 dark:text-white">{rutaAliadoCompleta ? "Aliado Fundador" : "Ruta del aliado"}</p><span className="text-[9px] font-black text-emerald-500">{misionesCompletadas}/4</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-cyan-400" style={{ width: `${progresoAliado}%` }}></div></div></div>
+          <span className="shrink-0 text-slate-400">›</span>
+        </button>
+      </div>
+
+      <div className="max-w-md w-full mx-auto px-6 relative z-20">
         
         {/* PANEL ESCÁNER */}
         {pestañaActiva === "escaner" && (
           <div className="space-y-6 animate-fade-in">
-            <div className="bg-white dark:bg-slate-800 rounded-[3rem] shadow-2xl dark:shadow-none p-8 text-center border border-slate-50 dark:border-slate-700 relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-400 to-teal-500"></div>
+            <div className="brand-panel bg-white dark:bg-slate-800 rounded-[3rem] dark:shadow-none p-8 text-center border border-slate-50 dark:border-slate-700 relative overflow-hidden">
+              <img src="/imju-elota.webp" alt="" aria-hidden="true" className="brand-card-watermark opacity-[.045]" />
+              <div className="brand-swarm" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
               <h2 className="text-sm font-black text-[#D65F08] dark:text-orange-400 mb-8 uppercase tracking-[0.3em]">Validación TPV</h2>
               
               {!modoEscaner && !jovenEscaneado && (
@@ -579,11 +720,28 @@ export default function PortalNegocios() {
 
               {modoEscaner && (
                 <div className="animate-fade-in">
-                  <div className="rounded-[2.5rem] overflow-hidden border-4 border-emerald-500 mb-6 aspect-square shadow-[0_0_50px_rgba(16,185,129,0.3)] bg-slate-900 relative">
+                  <div className="scanner-stage rounded-[2.5rem] overflow-hidden border-4 border-emerald-500 mb-6 aspect-square shadow-[0_0_50px_rgba(16,185,129,0.3)] bg-slate-900 relative">
                     <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-20 z-0"></div>
                     <div className="relative z-10 w-full h-full">
-                      <Scanner onScan={(res) => res && res.length > 0 && procesarQR(res[0].rawValue)} formats={['qr_code']} />
+                      <Scanner
+                        onScan={(res) => res?.[0]?.rawValue && procesarQR(res[0].rawValue)}
+                        onError={(error) => {
+                          console.error("Cámara QR:", error);
+                          setMensajeEscaner("No pudimos abrir la cámara. Revisa el permiso del navegador e intenta de nuevo.");
+                        }}
+                        formats={['qr_code']}
+                        constraints={{ facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }}
+                        components={{ finder: true, torch: true, zoom: true, onOff: true }}
+                        scanDelay={500}
+                        allowMultiple={false}
+                        sound={false}
+                      />
                     </div>
+                    <div aria-hidden="true" className="scanner-corners absolute inset-5 z-20 pointer-events-none"></div>
+                    <div aria-hidden="true" className="scan-beam absolute left-7 right-7 top-8 z-20 h-0.5 rounded-full bg-gradient-to-r from-transparent via-emerald-300 to-transparent shadow-[0_0_18px_rgba(110,231,183,.95)] pointer-events-none"></div>
+                  </div>
+                  <div className="mx-auto mb-4 flex w-fit items-center gap-2 rounded-full bg-emerald-50 px-4 py-2 text-[10px] font-extrabold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500"></span>{mensajeEscaner}
                   </div>
                   <button onClick={() => setModoEscaner(false)} className="text-[10px] font-black text-slate-400 dark:text-slate-300 uppercase tracking-widest bg-slate-100 dark:bg-slate-700 px-6 py-3 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">Cancelar Escaneo</button>
                 </div>
@@ -1103,8 +1261,10 @@ export default function PortalNegocios() {
         </div>
       )}
 
+      </div>
+
       {/* NAVEGACIÓN INFERIOR FLOTANTE */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[95%] max-w-[360px] bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl shadow-2xl shadow-slate-300/50 dark:shadow-black/50 border border-slate-100 dark:border-slate-700 rounded-[2rem] px-2 py-3 z-40">
+      <div className="brand-dock fixed bottom-6 left-1/2 -translate-x-1/2 w-[95%] max-w-[360px] bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl border rounded-[2rem] px-2 py-3 z-40">
         <div className="flex justify-between items-center">
           {[
             { id: "escaner", icon: "📷", label: "TPV" },

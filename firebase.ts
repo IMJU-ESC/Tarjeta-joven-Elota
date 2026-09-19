@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { browserLocalPersistence, getAuth, setPersistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
@@ -16,5 +16,11 @@ const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 export const auth = getAuth(app);
+// Mantiene la sesión aunque se cierre la pestaña o el navegador.
+export const authPersistenceReady = typeof window !== "undefined"
+  ? setPersistence(auth, browserLocalPersistence).catch((error) => {
+      console.error("No fue posible activar la persistencia local de sesión:", error);
+    })
+  : Promise.resolve();
 export const db = getFirestore(app);
 export const storage = getStorage(app);

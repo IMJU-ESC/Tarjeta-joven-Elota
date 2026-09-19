@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { useRouter } from "next/navigation";
-import { doc, updateDoc, collection, getDocs, query, where, getDoc } from "firebase/firestore"; 
-import { db } from "../../firebase";
+import { doc, collection, getDocs, query, where, getDoc } from "firebase/firestore"; 
+import { EmailAuthProvider, onAuthStateChanged, reauthenticateWithCredential, signOut, updatePassword } from "firebase/auth";
+import { auth, db } from "../../firebase";
 
 import dynamic from "next/dynamic";
 import "leaflet/dist/leaflet.css";
@@ -43,6 +44,10 @@ export default function TarjetaDigital() {
   const [avisos, setAvisos] = useState<any[]>([]); 
   const [modalAvisos, setModalAvisos] = useState(false);
   const [avisosNoLeidos, setAvisosNoLeidos] = useState(0);
+  const [misionesCompletadas, setMisionesCompletadas] = useState<string[]>([]);
+  const [modalRutaCompletada, setModalRutaCompletada] = useState(false);
+  const [modalMisiones, setModalMisiones] = useState(false);
+  const [notificacionMision, setNotificacionMision] = useState<{titulo: string, recompensa: string} | null>(null);
 
   const router = useRouter();
   const centroElota: [number, number] = [23.92173, -106.89264]; 
@@ -62,21 +67,31 @@ export default function TarjetaDigital() {
       setDeferredPrompt(e);
     });
 
-    const sesionGuardada = localStorage.getItem("sesionJoven");
-    if (sesionGuardada) {
-      const joven = JSON.parse(sesionGuardada);
-      setDatosJoven(joven);
-      
-      const contactadosGuardados = localStorage.getItem(`empleos_${joven.idFirebase}`);
-      if(contactadosGuardados) setEmpleosContactados(JSON.parse(contactadosGuardados));
-
-      cargarTodo(joven.idFirebase);
-    } else {
-      router.push("/login");
-    }
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) { router.replace("/login"); return; }
+      try {
+        const youthSnap = await getDoc(doc(db, "jovenes", user.uid));
+        if (!youthSnap.exists() || youthSnap.data().estatus !== "Activo") {
+          await signOut(auth);
+          router.replace("/login");
+          return;
+        }
+        const youth = { idFirebase: youthSnap.id, ...youthSnap.data() };
+        setDatosJoven(youth);
+        setMisionesCompletadas(JSON.parse(localStorage.getItem(`misiones_joven_${youthSnap.id}`) || "[]"));
+        const saved = localStorage.getItem(`empleos_${youthSnap.id}`);
+        if (saved) setEmpleosContactados(JSON.parse(saved));
+        await cargarTodo(youthSnap.id);
+      } catch (error) {
+        console.error("Sesión joven:", error);
+        await signOut(auth);
+        router.replace("/login");
+      }
+    });
 
     const temaGuardado = localStorage.getItem("temaTarjeta");
     if (temaGuardado === "dark") setModoOscuro(true);
+    return () => unsubscribe();
   }, [router]);
 
   const cargarTodo = async (idJoven: string) => {
@@ -105,13 +120,8 @@ export default function TarjetaDigital() {
         snapEmpleos.forEach((d) => eTemp.push({ idFirebase: d.id, ...d.data() }));
 
         // CORRECCIÓN DIRECTORIO: Carga todos los negocios excepto los "Pendiente"
-        const snapNegocios = await getDocs(collection(db, "negocios"));
-        snapNegocios.forEach((d) => {
-           const data = d.data();
-           if (data.estatus !== "Pendiente") {
-              nTemp.push({ idFirebase: d.id, ...data });
-           }
-        });
+        const snapNegocios = await getDocs(query(collection(db, "negocios"), where("estatus", "==", "Activo")));
+        snapNegocios.forEach((d) => nTemp.push({ idFirebase: d.id, ...d.data() }));
 
         localStorage.setItem("cache_promos", JSON.stringify(pTemp));
         localStorage.setItem("cache_empleos", JSON.stringify(eTemp));
@@ -128,12 +138,20 @@ export default function TarjetaDigital() {
       setListaEmpleos(eTemp);
       setListaNegocios(nTemp);
 
-      const qHistorial = query(collection(db, "visitas"), where("idJoven", "==", idJoven));
+      const qHistorial = query(collection(db, "visitas"), where("youthUid", "==", idJoven));
       const snapHistorial = await getDocs(qHistorial);
       const hTemp: any[] = [];
       snapHistorial.forEach((d) => hTemp.push({ idFirebase: d.id, ...d.data() }));
       hTemp.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
       setMiHistorial(hTemp);
+      if (hTemp.length > 0) {
+        setMisionesCompletadas((actuales) => {
+          if (actuales.includes("primera-visita")) return actuales;
+          const nuevas = [...actuales, "primera-visita"];
+          localStorage.setItem(`misiones_joven_${idJoven}`, JSON.stringify(nuevas));
+          return nuevas;
+        });
+      }
 
       const snapAvisos = await getDocs(query(collection(db, "anuncios")));
       const aTemp: any[] = [];
@@ -164,6 +182,24 @@ export default function TarjetaDigital() {
     setAvisosNoLeidos(0);
     setModalAvisos(false);
   };
+
+  const ejecutarMision = (id: string, action: () => void, recompensa = "+20 XP") => {
+    if (!datosJoven) return;
+    const esNueva = !misionesCompletadas.includes(id);
+    setMisionesCompletadas((actuales) => {
+      const nuevas = actuales.includes(id) ? actuales : [...actuales, id];
+      localStorage.setItem(`misiones_joven_${datosJoven.idFirebase}`, JSON.stringify(nuevas));
+      return nuevas;
+    });
+    if (esNueva) setNotificacionMision({ titulo: "Misión completada", recompensa });
+    action();
+  };
+
+  useEffect(() => {
+    if (!notificacionMision) return;
+    const timer = setTimeout(() => setNotificacionMision(null), 3200);
+    return () => clearTimeout(timer);
+  }, [notificacionMision]);
 
   const instalarApp = async () => {
     if (deferredPrompt) {
@@ -216,6 +252,15 @@ export default function TarjetaDigital() {
     }
   }, [miHistorial, datosJoven]);
 
+  useEffect(() => {
+    if (!datosJoven || new Set(misionesCompletadas).size < 5) return;
+    const key = `recompensa_ruta_joven_${datosJoven.idFirebase}`;
+    if (!localStorage.getItem(key)) {
+      localStorage.setItem(key, new Date().toISOString());
+      setModalRutaCompletada(true);
+    }
+  }, [misionesCompletadas, datosJoven]);
+
   const obtenerProgreso = (idPromo: string, meta: number) => {
     const usos = miHistorial.filter(v => v.idPromo === idPromo).length;
     let actual = usos % meta;
@@ -242,18 +287,13 @@ export default function TarjetaDigital() {
 
   const actualizarContrasena = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (contrasenaActual !== datosJoven.contrasena) {
-      alert("❌ La contraseña actual es incorrecta. No puedes realizar el cambio.");
-      return;
-    }
-    
     if (nuevaContrasena.length < 6) { alert("La nueva contraseña debe tener al menos 6 caracteres."); return; }
     setCambiandoPass(true);
     try {
-      await updateDoc(doc(db, "jovenes", datosJoven.idFirebase), { contrasena: nuevaContrasena });
-      const datosActualizados = { ...datosJoven, contrasena: nuevaContrasena };
-      localStorage.setItem("sesionJoven", JSON.stringify(datosActualizados));
-      setDatosJoven(datosActualizados);
+      const user = auth.currentUser;
+      if (!user?.email) throw new Error("Sesión no disponible");
+      await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, contrasenaActual));
+      await updatePassword(user, nuevaContrasena);
       alert("✅ ¡Contraseña actualizada con éxito!");
       setModalAjustes(false); 
       setNuevaContrasena("");
@@ -262,9 +302,9 @@ export default function TarjetaDigital() {
     setCambiandoPass(false);
   };
 
-  const cerrarSesion = () => {
-    localStorage.removeItem("sesionJoven");
-    window.location.href = "/";
+  const cerrarSesion = async () => {
+    await signOut(auth);
+    router.replace("/");
   };
 
   const abrirWhatsAppEmpleo = (empleo: any) => {
@@ -330,6 +370,27 @@ export default function TarjetaDigital() {
   const hoy = new Date().toISOString().split("T")[0];
   const promosVigentes = listaPromos.filter(p => !p.fechaVencimiento || p.fechaVencimiento >= hoy);
 
+  const irASeccion = (seccion: string) => {
+    setPestañaActiva(seccion);
+    setTimeout(() => document.getElementById("contenido-joven")?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+  };
+
+  const misiones = [
+    { id: "mostrar-qr", icon: "🪪", title: "Activa tu tarjeta", description: "Abre tu QR listo para escanear", reward: "+20 XP", action: () => setQrAmpliado(true) },
+    { id: "explorar-beneficios", icon: "🎁", title: "Caza un beneficio", description: "Explora descuentos disponibles", reward: "+20 XP", action: () => irASeccion("promos") },
+    { id: "conocer-aliado", icon: "🧭", title: "Conoce un aliado", description: "Encuentra un negocio en el mapa", reward: "+20 XP", action: () => irASeccion("directorio") },
+    { id: "buscar-oportunidad", icon: "🚀", title: "Impulsa tu futuro", description: "Revisa vacantes juveniles", reward: "+20 XP", action: () => irASeccion("empleos") },
+    { id: "primera-visita", icon: "⚡", title: "Primera visita", description: "Escanea tu tarjeta con un aliado", reward: "+40 XP", action: () => setQrAmpliado(true) },
+  ];
+  const totalMisiones = misiones.filter((mission) => misionesCompletadas.includes(mission.id)).length;
+  const xpJoven = misiones.reduce((xp, mission) => xp + (misionesCompletadas.includes(mission.id) ? Number(mission.reward.replace(/\D/g, "")) : 0), 0);
+  const rutaCompleta = totalMisiones === misiones.length;
+  const visitasSemana = miHistorial.filter((visita) => {
+    const dias = (Date.now() - new Date(visita.fecha).getTime()) / 86_400_000;
+    return dias >= 0 && dias <= 7;
+  }).length;
+  const progresoSemanal = Math.min(100, (visitasSemana / 3) * 100);
+
   let filtrados: any[] = [];
   if (pestañaActiva === "promos") {
     filtrados = promosVigentes
@@ -363,17 +424,60 @@ export default function TarjetaDigital() {
     : { bg: "bg-gradient-to-br from-slate-900 to-[#0a1128]", border: "border-blue-500/30", glow1: "bg-blue-500 animate-pulse", glow2: "bg-cyan-500 animate-pulse", text: "from-blue-300 to-cyan-300", badge: "CLÁSICA" };
 
   return (
-    <main className={`min-h-screen pb-24 font-sans selection:bg-violet-500/30 transition-colors duration-500 overflow-x-hidden ${modoOscuro ? "bg-[#080A12] text-white" : "bg-[#F3F5F9] text-slate-900"}`}>
+    <main className={`app-shell motion-enter min-h-screen pb-24 font-sans selection:bg-violet-500/30 transition-colors duration-500 overflow-x-hidden ${modoOscuro ? "bg-[#080A12] text-white" : "bg-[#FFF8F3] text-slate-900"}`}>
+      {modalRutaCompletada && (
+        <div className="fixed inset-0 z-[400] grid place-items-center overflow-hidden bg-slate-950/85 p-5 backdrop-blur-md" onClick={() => setModalRutaCompletada(false)}>
+          {["#f58220", "#f4c425", "#24b5d6", "#f70476", "#34d399", "#a78bfa"].map((color, index) => (
+            <span key={color} className="celebration-spark top-0" style={{ left: `${14 + index * 14}%`, background: color, animationDelay: `${index * .18}s`, ["--spark-x" as string]: `${index % 2 ? 35 : -30}px` }}></span>
+          ))}
+          <section className="motion-enter relative w-full max-w-sm overflow-hidden rounded-[2.7rem] border border-white/10 bg-gradient-to-br from-[#171d31] to-[#080d18] p-7 text-center text-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="brand-orb absolute -right-16 -top-16 h-48 w-48 rounded-full bg-orange-400/20 blur-3xl"></div>
+            <div className="relative mx-auto grid h-28 w-28 place-items-center rounded-[2.3rem] bg-gradient-to-br from-orange-400 via-pink-500 to-violet-600 text-6xl shadow-xl shadow-pink-950/40">🏅</div>
+            <p className="relative mt-6 text-[9px] font-black uppercase tracking-[.3em] text-orange-300">Ruta inicial completada</p>
+            <h2 className="relative mt-2 text-3xl font-black tracking-tight">¡Explorador de Elota!</h2>
+            <p className="relative mt-3 text-sm font-medium leading-6 text-slate-300">Desbloqueaste tu primera insignia y <strong className="text-white">120 XP</strong>. Ahora comienzan retos que se cumplen con visitas reales.</p>
+            <div className="relative mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-left">
+              <div className="flex items-center justify-between"><div><p className="text-[9px] font-black uppercase tracking-widest text-cyan-300">Nuevo reto semanal</p><p className="mt-1 text-sm font-black">Registra 3 visitas</p></div><span className="text-3xl">⚡</span></div>
+            </div>
+            <button onClick={() => setModalRutaCompletada(false)} className="shine-sweep relative mt-6 w-full overflow-hidden rounded-2xl bg-white py-4 text-[10px] font-black uppercase tracking-widest text-slate-900 active:scale-[.98]">Continuar mi aventura</button>
+          </section>
+        </div>
+      )}
+
+      {notificacionMision && (
+        <div className="fixed left-1/2 top-5 z-[450] flex w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 items-center gap-3 rounded-2xl border border-emerald-300/30 bg-slate-950/95 px-4 py-3 text-white shadow-2xl backdrop-blur-xl motion-enter">
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-400/15 text-xl">✨</span>
+          <div className="min-w-0 flex-1"><p className="text-[10px] font-black uppercase tracking-widest text-emerald-300">{notificacionMision.titulo}</p><p className="text-xs font-bold text-slate-300">Ganaste {notificacionMision.recompensa}</p></div>
+          <button onClick={() => setNotificacionMision(null)} className="text-slate-500" aria-label="Cerrar notificación">✕</button>
+        </div>
+      )}
+
+      {modalMisiones && (
+        <div className="fixed inset-0 z-[350] flex items-end justify-center bg-slate-950/70 p-0 backdrop-blur-sm sm:items-center sm:p-5" onClick={() => setModalMisiones(false)}>
+          <section className={`motion-enter max-h-[88vh] w-full max-w-2xl overflow-y-auto rounded-t-[2.3rem] border p-5 shadow-2xl sm:rounded-[2.3rem] sm:p-7 ${modoOscuro ? "border-white/10 bg-[#111625] text-white" : "border-slate-100 bg-white text-slate-900"}`} onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-4"><div><p className="text-[9px] font-black uppercase tracking-[.24em] text-orange-500">Ruta joven</p><h2 className="mt-1 text-2xl font-black">Misiones y recompensas</h2><p className="mt-1 text-xs font-medium text-slate-400">Avanza a tu ritmo. Puedes cerrar esta sección cuando quieras.</p></div><button onClick={() => setModalMisiones(false)} className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${modoOscuro ? "bg-white/10" : "bg-slate-100"}`} aria-label="Cerrar misiones">✕</button></div>
+            <div className="mt-5 flex items-center gap-4 rounded-2xl bg-gradient-to-r from-orange-500 to-pink-500 p-4 text-white"><div className="min-w-0 flex-1"><p className="text-[9px] font-black uppercase tracking-widest text-orange-100">Progreso total</p><div className="mt-2 h-2 overflow-hidden rounded-full bg-white/20"><div className="h-full rounded-full bg-white transition-all duration-700" style={{ width: `${(totalMisiones / misiones.length) * 100}%` }}></div></div></div><div className="text-right"><strong className="block text-xl">{xpJoven} XP</strong><span className="text-[9px] font-bold">{totalMisiones}/5 listas</span></div></div>
+            {rutaCompleta && <div className={`mt-4 rounded-2xl border p-4 ${modoOscuro ? "border-violet-400/20 bg-violet-400/10" : "border-violet-100 bg-violet-50"}`}><div className="flex items-center justify-between gap-4"><div><p className="text-[9px] font-black uppercase tracking-[.18em] text-violet-500">🏅 Explorador de Elota</p><p className="mt-1 text-xs font-medium text-slate-400">Reto semanal: registra tres visitas.</p></div><strong className="text-lg text-violet-500">{Math.min(visitasSemana, 3)}/3</strong></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-violet-200/40 dark:bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-400" style={{ width: `${progresoSemanal}%` }}></div></div></div>}
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              {misiones.map((mission) => {
+                const complete = misionesCompletadas.includes(mission.id);
+                return <button key={mission.id} onClick={() => { setModalMisiones(false); setTimeout(() => mission.id === "primera-visita" && miHistorial.length === 0 ? mission.action() : ejecutarMision(mission.id, mission.action, mission.reward), 160); }} className={`rounded-2xl border p-4 text-left transition active:scale-[.98] ${complete ? "border-emerald-200 bg-emerald-50 dark:border-emerald-700/40 dark:bg-emerald-900/20" : modoOscuro ? "border-white/10 bg-white/5" : "border-slate-100 bg-slate-50"}`}><div className="flex items-center justify-between"><span className="text-2xl">{complete ? "✅" : mission.icon}</span><span className={`rounded-full px-2 py-1 text-[8px] font-black ${complete ? "bg-emerald-500 text-white" : "bg-orange-100 text-orange-700"}`}>{complete ? "LISTA" : mission.reward}</span></div><h3 className="mt-3 text-sm font-black">{mission.title}</h3><p className="mt-1 text-[10px] font-medium text-slate-400">{mission.description}</p></button>;
+              })}
+            </div>
+          </section>
+        </div>
+      )}
       
       {/* HEADER CON CAMPANITA */}
-      <div className="pt-6 pb-6 px-6 max-w-md mx-auto flex justify-between items-center animate-fade-in">
-        <div className="flex items-center gap-4">
-          <div className="bg-white p-2 rounded-2xl shadow-lg border border-slate-100">
-             <img src="/imju-elota.webp" alt="IMJU" className="w-10 h-10 object-contain" />
+      <div className={`brand-header-card mx-4 mt-4 mb-6 max-w-md p-4 sm:mx-auto animate-fade-in ${modoOscuro ? "brand-header-dark" : ""}`}>
+      <div className="flex justify-between items-center">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="brand-logo-stage">
+             <img src="/imju-elota.webp" alt="IMJU Elota" />
           </div>
-          <div>
-            <p className={`text-[11px] font-black uppercase tracking-widest mb-1 ${modoOscuro ? "text-violet-400" : "text-slate-400"}`}>Elota</p>
-            <h1 className={`text-xl font-black tracking-tighter ${modoOscuro ? "text-white" : "text-slate-900"}`}>¡Qué onda, {datosJoven.nombreCompleto.split(" ")[0]}!</h1>
+          <div className="min-w-0">
+            <p className="mb-1 bg-gradient-to-r from-orange-500 via-pink-500 to-cyan-500 bg-clip-text text-[9px] font-black uppercase tracking-[.22em] text-transparent">Experiencia joven · Elota</p>
+            <h1 className={`max-w-[145px] truncate text-xl font-black tracking-tighter ${modoOscuro ? "text-white" : "text-slate-900"}`}>¡Qué onda, {datosJoven.nombreCompleto.split(" ")[0]}!</h1>
           </div>
         </div>
         
@@ -386,15 +490,16 @@ export default function TarjetaDigital() {
           <button onClick={() => setModalAjustes(true)} className={`w-11 h-11 rounded-full flex items-center justify-center text-lg transition-all ${modoOscuro ? "bg-[#161B2C] text-slate-300 hover:text-white" : "bg-white shadow-md border border-slate-100 text-slate-400 hover:text-slate-800"}`}>⚙️</button>
         </div>
       </div>
+      </div>
 
+      <div className="mx-auto w-full max-w-md">
       {/* TARJETA DIGITAL */}
-      <div className="max-w-md mx-auto px-6 relative z-20 perspective-1000 animate-slide-up">
+      <div className="max-w-md w-full mx-auto px-6 lg:px-0 relative z-20 perspective-1000 animate-slide-up">
         <div className={`relative transition-all duration-700 hover:shadow-2xl ${themeColors.bg} rounded-[2.5rem] p-7 overflow-hidden border ${themeColors.border} shadow-2xl`}>
           
           <div className="absolute inset-0 z-10 pointer-events-none opacity-40 bg-gradient-to-tr from-transparent via-white/20 to-transparent -translate-x-full animate-[shimmer_3s_ease-in-out_infinite]"></div>
-          <div className="absolute inset-0 opacity-[0.03] text-white font-mono text-[7px] overflow-hidden rotate-12 scale-150 z-0">
-             {Array(50).fill(`TARJETA JOVEN ${themeColors.badge} ELOTA `).map((t,i) => <p key={i}>{t}</p>)}
-          </div>
+          <img src="/imju-elota.webp" alt="" aria-hidden="true" className="brand-card-watermark" />
+          <div className="brand-swarm" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
           <div className={`absolute -top-24 -right-24 w-60 h-60 rounded-full mix-blend-screen filter blur-[70px] opacity-60 transition-colors duration-700 z-0 ${themeColors.glow1}`}></div>
           <div className={`absolute -bottom-24 -left-24 w-60 h-60 rounded-full mix-blend-screen filter blur-[70px] opacity-60 transition-colors duration-700 z-0 ${themeColors.glow2}`}></div>
 
@@ -427,8 +532,8 @@ export default function TarjetaDigital() {
               </div>
             </div>
             
-            <div className="cursor-pointer bg-white p-2 rounded-2xl shadow-lg active:scale-95 transition-transform flex-shrink-0" onClick={() => setQrAmpliado(true)}>
-              <QRCodeCanvas value={datosJoven.codigoUnicoQR} size={50} />
+            <div className="cursor-pointer bg-white p-2 rounded-2xl shadow-lg active:scale-95 transition-transform flex-shrink-0" onClick={() => ejecutarMision("mostrar-qr", () => setQrAmpliado(true))}>
+              <QRCodeCanvas value={datosJoven.codigoUnicoQR} size={64} level="M" marginSize={2} />
             </div>
           </div>
 
@@ -445,6 +550,16 @@ export default function TarjetaDigital() {
              )}
           </div>
         </div>
+      </div>
+
+      {/* Acceso compacto: los detalles viven en una hoja opcional. */}
+      <section className="mx-auto mt-4 w-full max-w-md px-6">
+        <button onClick={() => setModalMisiones(true)} className={`brand-mini-card interactive-card flex w-full items-center gap-4 rounded-2xl p-3.5 text-left ${modoOscuro ? "brand-mini-dark" : ""}`}>
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-orange-500 to-pink-500 text-xl text-white">{rutaCompleta ? "🏅" : "✨"}</div>
+          <div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-3"><p className={`truncate text-xs font-black ${modoOscuro ? "text-white" : "text-slate-900"}`}>{rutaCompleta ? "Explorador de Elota" : "Tu ruta joven"}</p><span className="text-[9px] font-black text-orange-500">{totalMisiones}/5</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-orange-400 to-pink-500" style={{ width: `${(totalMisiones / misiones.length) * 100}%` }}></div></div></div>
+          <span className="shrink-0 text-slate-400">›</span>
+        </button>
+      </section>
       </div>
 
       {/* ESTILOS Y SCROLLBAR INTELIGENTE */}
@@ -467,7 +582,7 @@ export default function TarjetaDigital() {
       `}} />
 
       {/* BUSCADOR Y FILTROS */}
-      <div className="max-w-md mx-auto px-6 mt-8">
+      <div id="contenido-joven" className="max-w-md mx-auto px-6 mt-8 scroll-mt-6">
         <div className="relative mb-6">
           <input 
             type="text" 
@@ -865,8 +980,9 @@ export default function TarjetaDigital() {
           <div className={`p-8 rounded-[3rem] shadow-2xl flex flex-col items-center relative w-full max-w-sm animate-slide-up ${modoOscuro ? "bg-[#161B2C] border border-white/10" : "bg-white"}`} onClick={e => e.stopPropagation()}>
             <h3 className={`text-sm font-black mb-6 uppercase tracking-[0.2em] ${modoOscuro ? "text-white" : "text-slate-900"}`}>Escáner de Beneficio</h3>
             <div className="bg-white p-4 rounded-[2rem] shadow-[0_0_60px_rgba(124,58,237,0.25)] border-2 border-violet-100 mb-8">
-              <QRCodeCanvas id="qr-joven" value={datosJoven.codigoUnicoQR} size={220} />
+              <QRCodeCanvas id="qr-joven" value={datosJoven.codigoUnicoQR} size={240} level="M" marginSize={4} />
             </div>
+            <p className={`mb-6 break-all text-center font-mono text-[10px] font-black tracking-wider ${modoOscuro ? "text-slate-300" : "text-slate-600"}`}>{datosJoven.codigoUnicoQR}</p>
             <div className="flex w-full gap-3">
               <button onClick={() => setQrAmpliado(false)} className={`flex-1 font-black py-4.5 rounded-2xl text-[10px] uppercase tracking-widest transition-colors ${modoOscuro ? "bg-[#111625] text-slate-400" : "bg-slate-100 text-slate-500"}`}>Cerrar</button>
               <button onClick={descargarQR} className="flex-1 bg-violet-600 text-white font-black py-4.5 rounded-2xl text-[10px] uppercase tracking-widest shadow-lg shadow-violet-900/30">Guardar QR</button>

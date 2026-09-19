@@ -2,63 +2,90 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    function estaAutenticado() {
-      return request.auth != null;
+    function autenticado() { return request.auth != null; }
+    function administrador() {
+      return autenticado() && exists(/databases/$(database)/documents/administradores/$(request.auth.uid));
+    }
+    function master() {
+      return administrador() && get(/databases/$(database)/documents/administradores/$(request.auth.uid)).data.rol == "Master";
+    }
+    function negocioActivo() {
+      return autenticado()
+        && exists(/databases/$(database)/documents/negocios/$(request.auth.uid))
+        && get(/databases/$(database)/documents/negocios/$(request.auth.uid)).data.estatus == "Activo";
     }
 
-    function esAdministrador() {
-      return estaAutenticado()
-        && exists(/databases/$(database)/documents/administradores/$(request.auth.uid));
+    match /administradores/{uid} {
+      allow get: if autenticado() && (request.auth.uid == uid || administrador());
+      allow list: if administrador();
+      allow create, update, delete: if master();
     }
 
-    function esMaster() {
-      return esAdministrador()
-        && get(/databases/$(database)/documents/administradores/$(request.auth.uid)).data.rol == "Master";
+    match /jovenes/{uid} {
+      allow get: if administrador() || (autenticado() && request.auth.uid == uid);
+      allow list: if administrador();
+      allow create, delete: if administrador();
+      allow update: if administrador() || (
+        autenticado() && request.auth.uid == uid
+        && request.resource.data.authUid == resource.data.authUid
+        && request.resource.data.correo == resource.data.correo
+        && request.resource.data.codigoUnicoQR == resource.data.codigoUnicoQR
+        && request.resource.data.estatus == "Activo"
+      );
     }
 
-    match /administradores/{adminId} {
-      allow get: if estaAutenticado()
-        && (request.auth.uid == adminId || esAdministrador());
-      allow list: if esAdministrador();
-      allow create, update, delete: if esMaster();
+    match /negocios/{uid} {
+      allow read: if administrador() || resource.data.estatus == "Activo"
+        || (autenticado() && request.auth.uid == uid);
+      allow create, delete: if administrador();
+      allow update: if administrador() || (
+        autenticado() && request.auth.uid == uid
+        && request.resource.data.authUid == resource.data.authUid
+        && request.resource.data.correo == resource.data.correo
+        && request.resource.data.estatus == "Activo"
+      );
     }
 
-    // Compatibilidad temporal con el acceso actual por correo y contraseña.
-    match /jovenes/{jovenId} {
-      allow read, create, update: if true;
-      allow delete: if esAdministrador();
-    }
-
-    match /negocios/{negocioId} {
-      allow read, create, update: if true;
-      allow delete: if esAdministrador();
+    match /tarjetas/{uid} {
+      allow read: if administrador() || negocioActivo() || (autenticado() && request.auth.uid == uid);
+      allow write: if administrador();
     }
 
     match /visitas/{visitaId} {
-      allow read, create, delete: if true;
-      allow update: if esAdministrador();
+      allow read: if administrador()
+        || (negocioActivo() && resource.data.ownerUid == request.auth.uid)
+        || (autenticado() && resource.data.youthUid == request.auth.uid);
+      allow create: if negocioActivo() && request.resource.data.ownerUid == request.auth.uid;
+      allow delete: if administrador() || (negocioActivo() && resource.data.ownerUid == request.auth.uid);
+      allow update: if administrador();
     }
 
     match /anuncios/{anuncioId} {
       allow read: if true;
-      allow create, update, delete: if esAdministrador();
+      allow write: if administrador();
     }
 
-    match /promociones/{promocionId} {
-      allow read, create, update, delete: if true;
+    match /promociones/{publicacionId} {
+      allow read: if resource.data.estatus == "Activa" || administrador()
+        || (negocioActivo() && resource.data.ownerUid == request.auth.uid);
+      allow create: if negocioActivo() && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if administrador()
+        || (negocioActivo() && resource.data.ownerUid == request.auth.uid);
     }
 
-    match /empleos/{empleoId} {
-      allow read, create, update, delete: if true;
+    match /empleos/{publicacionId} {
+      allow read: if resource.data.estatus == "Activa" || administrador()
+        || (negocioActivo() && resource.data.ownerUid == request.auth.uid);
+      allow create: if negocioActivo() && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if administrador()
+        || (negocioActivo() && resource.data.ownerUid == request.auth.uid);
     }
 
     match /sistema/{documentoId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if administrador() || negocioActivo();
     }
 
-    match /{documento=**} {
-      allow read, write: if false;
-    }
+    match /{documento=**} { allow read, write: if false; }
   }
 }

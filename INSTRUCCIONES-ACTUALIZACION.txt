@@ -1,54 +1,176 @@
-TARJETA JOVEN ELOTA - ACTUALIZACION DE REGISTROS
-=================================================
+TARJETA JOVEN ELOTA - GUÍA PASO A PASO
+========================================
 
-1. REEMPLAZAR LA CARPETA
-------------------------
-Conserva tu archivo .env local actual. No lo borres ni lo subas a GitHub.
-Reemplaza los archivos del proyecto con los contenidos de este ZIP.
+MEJORAS V7
+----------
+- El panel de misiones siempre aparece por encima de la tarjeta digital, el
+  escáner, las ventanas y la navegación; ya no queda escondido detrás.
+- La identidad visual ahora toma los cinco colores de los logotipos oficiales:
+  naranja, rosa, verde, azul y amarillo, sin perder legibilidad.
+- Los logotipos forman parte de la experiencia mediante halos suaves, marcas de
+  agua y movimiento ligero en portada, tarjeta y portal de negocios.
+- Se rediseñaron encabezados, paneles principales, accesos y navegación inferior
+  para que la aplicación se sienta más fresca tanto en celular como en PC.
+- Las animaciones usan solamente CSS con opacidad y transformaciones, respetan
+  la opción de movimiento reducido y no requieren una librería adicional.
+- Se eliminó un patrón de 50 elementos repetidos de la tarjeta y se sustituyó
+  por una marca de agua WebP y cinco acentos ligeros para reducir trabajo visual.
+- La sesión se conserva al cerrar y volver a abrir una pestaña.
+- El lector QR usa cámara trasera, guía animada y una consulta compatible con
+  las reglas de seguridad: el negocio solo consulta sus propias visitas.
+- La captura manual TJE fue retirada para conservar la experiencia de escaneo.
+- Las misiones juveniles abren directamente QR, beneficios, aliados o empleos.
+- Las misiones de negocio abren perfil, promociones, vacantes o escáner.
+- La portada fue rediseñada con una experiencia más moderna y juvenil.
+- Se agregó una tipografía más fresca y animaciones CSS ligeras sin librerías.
+- Al completar las misiones se desbloquean insignias, aparece una celebración y
+  comienza una meta continua basada en visitas o validaciones reales.
+- En computadora, las tarjetas y rutas aprovechan dos columnas; en celular se
+  conservan botones grandes, desplazamiento táctil y una sola columna.
+- Los fondos usan los logotipos WebP comprimidos con movimiento CSS muy ligero.
+- El enlace de activación abre una página propia para crear la contraseña.
+- Los correos institucionales muestran los logotipos oficiales de IMJU y del
+  Ayuntamiento de Elota.
+- Las misiones ya no ocupan un bloque grande: se muestran como una barra compacta.
+- Al tocar la barra, las misiones se abren en una hoja inferior en celular y en
+  un panel centrado en computadora.
+- Cada nueva misión juvenil muestra una notificación breve de recompensa.
+- Las insignias, metas y celebraciones se conservan sin saturar la pantalla.
+- Los portales recuperan una columna central proporcionada tanto en móvil como
+  en escritorio, priorizando QR, beneficios y escáner.
 
-2. PUBLICAR REGLAS DE FIRESTORE
--------------------------------
-En Firebase abre Firestore Database > Reglas.
-Copia todo el contenido de firestore.rules, pegalo y presiona Publicar.
-
-3. PUBLICAR REGLAS DE STORAGE
------------------------------
-En Firebase abre Storage > Reglas.
-Copia todo el contenido de storage.rules, pegalo y presiona Publicar.
-Si Firebase solicita permiso para conectar las reglas de Storage con Firestore,
-acepta la solicitud.
-
-4. PROBAR EN VISUAL STUDIO CODE
--------------------------------
-Abre la terminal dentro del proyecto y ejecuta:
-
-  npm install
-  npm run build
-
-5. SUBIR A GITHUB
------------------
-Si el build termina correctamente, ejecuta:
-
-  git add .
-  git commit -m "Completar registros, contrasenas y QR"
-  git push origin main
-
-Vercel iniciara automaticamente un despliegue nuevo.
-
-6. PRUEBAS RECOMENDADAS
------------------------
-A) Registrar un joven desde /login. Debe quedar Pendiente.
-B) Aprobarlo desde /panel-imju-elota. Debe recibir correo, tener una
-   contrasena y un codigo QR diferente, y borrarse el documento probatorio.
-C) Registrar un joven desde el panel. Debe quedar Activo y recibir correo.
-D) Registrar un negocio desde /login-negocio. Debe quedar Pendiente y sin
-   contrasena hasta su aprobacion.
-E) Aprobar el negocio. Debe recibir su contrasena por correo y borrarse la
-   evidencia de fachada.
-F) Registrar un negocio desde el panel. Debe quedar Activo y recibir correo.
+La cámara funciona en http://localhost:3000 y en sitios HTTPS como Vercel. Si
+abres desde un celular usando una dirección local http://192.168..., el navegador
+puede bloquear la cámara; prueba el escáner en Vercel mediante HTTPS.
 
 IMPORTANTE
 ----------
-La fotografia del joven y el logo del negocio se conservan cuando se aprueban.
-Cuando una solicitud se rechaza, se eliminan el registro y sus archivos.
-El QR del joven nunca se reutiliza como contrasena.
+Esta versión usa Firebase Authentication para jóvenes y negocios. Las
+contraseñas ya no se guardan ni se muestran en Firestore.
+
+Como los datos actuales son de prueba, elimina jóvenes, negocios, tarjetas,
+visitas, promociones y empleos de prueba antes de comenzar. Conserva la
+colección administradores y tu usuario Master de Firebase Authentication.
+También elimina de Authentication las cuentas de jóvenes y negocios de prueba.
+
+1. ABRIR EN VISUAL STUDIO CODE
+------------------------------
+Descomprime el ZIP y usa Archivo > Abrir carpeta. En Terminal > Nueva terminal:
+
+  npm install
+
+2. CREAR .env.local
+-------------------
+Copia .env.example y nombra la copia .env.local. Completa las seis variables
+NEXT_PUBLIC_FIREBASE_ con los datos de Firebase > Configuración del proyecto >
+General > Tus apps > Aplicación web.
+
+No subas .env.local a GitHub.
+
+3. ACTIVAR INICIO DE SESIÓN
+---------------------------
+Firebase > Authentication > Sign-in method > Correo electrónico/contraseña.
+Activa la primera opción y guarda.
+
+En Authentication > Settings > Authorized domains confirma:
+
+  localhost
+  tarjeta-imju-elota.vercel.app
+
+Si tu dominio de Vercel es diferente, agrega exactamente el dominio real.
+
+4. CUENTA DE SERVICIO PRIVADA
+-----------------------------
+Firebase > Configuración del proyecto > Cuentas de servicio > Generar nueva
+clave privada. Se descargará un JSON. NO lo copies al proyecto ni a GitHub.
+
+Del JSON usa en .env.local:
+
+  FIREBASE_ADMIN_PROJECT_ID       = project_id
+  FIREBASE_ADMIN_CLIENT_EMAIL     = client_email
+  FIREBASE_ADMIN_PRIVATE_KEY      = private_key completa
+  FIREBASE_ADMIN_STORAGE_BUCKET   = igual a NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+
+La llave puede conservar los signos \n o usar saltos de línea reales.
+
+5. CORREO GMAIL
+---------------
+En tarjetaimjuelota@gmail.com activa verificación en dos pasos y crea una
+Contraseña de aplicación para Correo. Después configura:
+
+  EMAIL_USER=tarjetaimjuelota@gmail.com
+  EMAIL_APP_PASSWORD=la_clave_de_16_caracteres
+  APP_URL=http://localhost:3000
+
+EMAIL_APP_PASSWORD no es la contraseña normal de Gmail.
+
+6. PUBLICAR LAS REGLAS
+----------------------
+En Firebase > Firestore Database > Reglas, copia firestore.rules y publica.
+En Firebase > Storage > Reglas, copia storage.rules y publica.
+
+7. PROBAR LOCALMENTE
+--------------------
+En la terminal:
+
+  npm run build
+  npm run dev
+
+Abre http://localhost:3000 y prueba en orden:
+
+  1) Registrar un joven en /login.
+  2) Aprobarlo en /panel-imju-elota.
+  3) Abrir su correo y crear la contraseña.
+  4) Entrar como joven y mostrar su QR.
+  5) Registrar y aprobar un negocio.
+  6) Abrir su correo, crear contraseña y entrar al portal.
+  7) Escanear el QR y registrar una visita.
+  8) Confirmar que aumente el progreso del joven.
+
+El documento probatorio y la evidencia se borran al aprobar o rechazar. La foto
+de perfil y el logo sí se conservan.
+
+8. SUBIR A GITHUB DESDE VS CODE
+-------------------------------
+Ejecuta:
+
+  git status
+  git add .
+  git commit -m "Version segura y dinamica de Tarjeta Joven Elota"
+  git push origin main
+
+En cambios futuros repite git add, git commit y git push. Vercel desplegará cada
+push automáticamente; no necesitas subir archivos manualmente en GitHub.
+
+9. VARIABLES EN VERCEL
+----------------------
+Vercel > proyecto > Settings > Environment Variables. Agrega todas las variables
+de .env.example para Production, Preview y Development. En producción usa:
+
+  APP_URL=https://tarjeta-imju-elota.vercel.app
+
+Sin diagonal al final. Si la URL real es otra, usa exactamente esa.
+
+FIREBASE_ADMIN_, EMAIL_APP_PASSWORD y la llave privada son secretos. Nunca deben
+comenzar con NEXT_PUBLIC_. Después abre Deployments y elige Redeploy.
+
+10. ACCESOS
+-----------
+Al aprobar, el sistema crea la cuenta de Authentication, genera el QR cuando
+corresponde, borra la evidencia y envía un enlace para definir la contraseña.
+Nunca guarda la contraseña en Firestore.
+
+En los directorios del panel, el botón Acceso reenvía el enlace si la persona no
+recibió el primero.
+
+Después de publicar esta versión, reenvía el acceso desde el panel para probar la nueva
+pantalla de contraseña. Los enlaces generados antes de publicar pueden conservar
+la pantalla anterior de Firebase.
+
+NUNCA SUBAS A GITHUB
+--------------------
+  .env.local
+  el JSON de la cuenta de servicio
+  contraseñas de Gmail
+  node_modules
+  .next

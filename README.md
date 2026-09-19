@@ -1,51 +1,55 @@
 # Tarjeta Joven Elota
 
-Portal web del Instituto Municipal de la Juventud de Elota para jóvenes, negocios aliados y personal administrador.
+PWA de IMJU Elota para jóvenes, negocios aliados y administración.
 
-## Estado de esta copia
+## Incluido en esta versión
 
-- Identidad institucional adaptada a Elota.
-- Logotipos de IMJU Elota y H. Ayuntamiento de Elota incorporados.
-- Mapa centrado en La Cruz, Elota.
-- Facebook, domicilio y correo institucional actualizados.
-- Firebase anterior desconectado y sustituido por variables de entorno.
-- Correo SMTP trasladado a variables de entorno.
-- Dependencia de cámara incompatible sustituida por la cámara nativa del navegador.
+- Firebase Authentication para jóvenes, negocios y administradores.
+- Contraseñas fuera de Firestore y sesiones administradas por Firebase.
+- Registros y aprobaciones procesados desde el servidor con Firebase Admin.
+- Activación y recuperación mediante enlaces personales por correo.
+- QR único con una ficha mínima separada del expediente juvenil.
+- Eliminación de documentos de validación al aprobar o rechazar.
+- Reglas restrictivas de Firestore y Storage.
+- Compresión de imágenes y límites de tamaño en servidor.
+- Interfaz ligera con niveles, progreso, misiones y confirmaciones animadas.
+- Misiones accionables que guían al usuario hacia cada módulo.
+- Lector QR reforzado con cámara trasera, guía animada y permisos seguros.
+- Consulta de visitas limitada al negocio autenticado, sin abrir las reglas.
+- Tipografía juvenil y microanimaciones CSS optimizadas.
+- Insignias, celebraciones y metas continuas basadas en visitas reales.
+- Diseño adaptable con dos columnas en escritorio y una en celular.
+- Página personalizada para crear contraseña y correos con logotipos oficiales.
+- Misiones ocultas en paneles opcionales con un indicador compacto de progreso.
+- Notificaciones breves de XP sin saturar la pantalla principal.
+- Persistencia local de sesión al cerrar una pestaña.
+- Respeto a la preferencia de movimiento reducido del dispositivo.
+- Paneles de misiones con capa corregida para mostrarse sobre cualquier tarjeta.
+- Identidad visual multicolor inspirada en los logotipos oficiales de Elota.
+- Halos, marcas de agua y acentos animados mediante CSS ligero.
+- Menos elementos decorativos repetidos para mantener rapidez en celulares.
 
-Esta copia no está conectada todavía a un Firebase real. Es intencional para evitar cualquier comunicación con el portal original.
+## Primer inicio
 
-## Inicio local
+1. Ejecuta `npm install`.
+2. Copia `.env.example` como `.env.local`.
+3. Completa Firebase Web, Firebase Admin y Gmail.
+4. Publica `firestore.rules` y `storage.rules`.
+5. Ejecuta `npm run build` y después `npm run dev`.
 
-1. Instala Node.js 20 o superior.
-2. Ejecuta `npm install` dentro de esta carpeta.
-3. Copia `.env.example` como `.env.local`.
-4. Completa las variables del nuevo proyecto Firebase.
-5. Ejecuta `npm run dev`.
-6. Abre `http://localhost:3000`.
+Consulta `INSTRUCCIONES-ACTUALIZACION.txt` para el proceso completo.
 
-## Variables necesarias
+## Rutas
 
-Consulta `.env.example`. Nunca publiques `.env.local` ni una contraseña de aplicación de Google en GitHub.
+- `/login`: acceso y registro juvenil.
+- `/tarjeta`: tarjeta, QR, beneficios, empleos y progreso.
+- `/login-negocio`: acceso y solicitud de negocios.
+- `/portal-negocios`: escáner, publicaciones y métricas.
+- `/directorio`: directorio público de aliados.
+- `/panel-imju-elota`: administración.
 
-## Rutas principales
+## Seguridad
 
-- `/`: página inicial.
-- `/login`: registro e ingreso de jóvenes.
-- `/tarjeta`: tarjeta digital, beneficios y empleos.
-- `/directorio`: directorio público de negocios.
-- `/login-negocio`: registro e ingreso de comercios.
-- `/portal-negocios`: panel para comercios aliados.
-- `/panel-imju-elota`: panel administrativo.
-- `/aviso-de-privacidad`: aviso de privacidad.
-
-## Datos institucionales
-
-- Nombre: Tarjeta Joven Elota.
-- Instituto: Instituto Municipal de la Juventud de Elota.
-- Dirección: Av. Gabriel Leyva S/N, Centro, C.P. 82700, La Cruz, Sinaloa.
-- Correo: tarjetaimjuelota@gmail.com.
-- Facebook: https://www.facebook.com/profile.php?id=100075974077385
-
-## Antes de publicar
-
-El sistema heredado utiliza un acceso propio para jóvenes y negocios. Antes de recibir registros reales se debe completar una segunda etapa de seguridad: migrar esos accesos a Firebase Authentication, crear reglas restrictivas de Firestore y Storage y proteger la ruta de envío de correos con validación administrativa. No uses Firebase en modo de prueba para producción.
+Nunca publiques `.env.local`, el JSON de la cuenta de servicio ni la contraseña
+de aplicación de Gmail. Las variables `FIREBASE_ADMIN_*` son privadas y jamás
+deben llevar el prefijo `NEXT_PUBLIC_`.
