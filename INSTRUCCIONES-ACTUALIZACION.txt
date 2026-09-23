@@ -1,12 +1,46 @@
 TARJETA JOVEN ELOTA - GUÍA PASO A PASO
 ========================================
 
-MEJORAS V7
+MEJORAS V10
 ----------
+- Las fotografías ahora se convierten automáticamente a WebP, se redimensionan
+  según su uso y ajustan su calidad de manera progresiva para ocupar lo mínimo
+  posible sin degradarlas innecesariamente.
+- Metas aproximadas: foto juvenil 160 KB, documento fotográfico 500 KB, logo de
+  negocio 150 KB y fotografía de fachada 300 KB. El resultado puede variar de
+  acuerdo con la imagen original.
+- La conversión mediante el navegador elimina metadatos innecesarios de las
+  fotografías. Los PDF no se recomprimen y conservan el límite de 1.5 MB.
+- Al sustituir una foto de perfil, logo, menú o promoción, el archivo anterior
+  se elimina de Storage para no acumular copias que ya no se utilizan.
+- Al eliminar un joven o negocio desde el panel también se retiran sus imágenes
+  asociadas de Storage.
+- El documento de identidad del joven y la evidencia de fachada del negocio son
+  temporales: se eliminan automáticamente al aprobar o rechazar la solicitud.
+- La foto de perfil juvenil y el logo del negocio sólo se conservan cuando la
+  solicitud es aprobada, porque forman parte de la tarjeta y del directorio.
+- El aviso de privacidad y la aceptación del registro explican expresamente el
+  uso temporal y la eliminación de las evidencias de validación.
+- Se eliminó el naranja de la interfaz y se sustituyó por una paleta neutra de
+  gris pizarra, blanco suave, verde petróleo e índigo tenue.
+- Los logotipos oficiales se conservan intactos; su presencia decorativa se
+  redujo para mantener una interfaz limpia, cómoda y fácil de comprender.
+- El registro evita enviar archivos que superen el límite de las funciones de
+  Vercel y avisa cuando un PDF debe reducirse a menos de 1.5 MB.
+- Las fotografías siguen comprimiéndose automáticamente antes del envío.
+- El registro funciona desde el dominio principal o una URL de despliegue de
+  Vercel cuando la solicitud se realiza desde la misma página.
+- Si Firebase Admin está incompleto, el sistema informa qué credencial revisar
+  en lugar de mostrar solamente "No fue posible guardar la solicitud".
+- Los tamaños críticos de los logotipos y las animaciones principales también
+  se incluyen directamente en el documento. Esto evita diferencias visuales
+  entre localhost y el CSS optimizado que publica Vercel.
+- Se añadieron límites mínimos y máximos al logotipo de encabezado para impedir
+  que una regla externa o un archivo retrasado pueda ampliarlo.
 - El panel de misiones siempre aparece por encima de la tarjeta digital, el
   escáner, las ventanas y la navegación; ya no queda escondido detrás.
-- La identidad visual ahora toma los cinco colores de los logotipos oficiales:
-  naranja, rosa, verde, azul y amarillo, sin perder legibilidad.
+- La identidad visual usa tonos sobrios para que los colores completos de los
+  logotipos oficiales destaquen sin competir con botones, fondos o formularios.
 - Los logotipos forman parte de la experiencia mediante halos suaves, marcas de
   agua y movimiento ligero en portada, tarjeta y portal de negocios.
 - Se rediseñaron encabezados, paneles principales, accesos y navegación inferior
@@ -84,7 +118,7 @@ Si tu dominio de Vercel es diferente, agrega exactamente el dominio real.
 Firebase > Configuración del proyecto > Cuentas de servicio > Generar nueva
 clave privada. Se descargará un JSON. NO lo copies al proyecto ni a GitHub.
 
-Del JSON usa en .env.local:
+Del JSON usa en .env.local y en Vercel:
 
   FIREBASE_ADMIN_PROJECT_ID       = project_id
   FIREBASE_ADMIN_CLIENT_EMAIL     = client_email
@@ -92,6 +126,8 @@ Del JSON usa en .env.local:
   FIREBASE_ADMIN_STORAGE_BUCKET   = igual a NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
 
 La llave puede conservar los signos \n o usar saltos de línea reales.
+En Vercel, no agregues comillas al inicio o al final del valor. Selecciona los
+entornos Production y Preview y realiza un Redeploy después de guardar.
 
 5. CORREO GMAIL
 ---------------
@@ -108,6 +144,9 @@ EMAIL_APP_PASSWORD no es la contraseña normal de Gmail.
 ----------------------
 En Firebase > Firestore Database > Reglas, copia firestore.rules y publica.
 En Firebase > Storage > Reglas, copia storage.rules y publica.
+
+No omitas la publicación de storage.rules en esta versión: contiene el nuevo
+límite de 750 KB por imagen para impedir cargas innecesariamente pesadas.
 
 7. PROBAR LOCALMENTE
 --------------------
@@ -130,13 +169,17 @@ Abre http://localhost:3000 y prueba en orden:
 El documento probatorio y la evidencia se borran al aprobar o rechazar. La foto
 de perfil y el logo sí se conservan.
 
+Para verificar la eliminación, revisa Firebase > Storage después de aprobar o
+rechazar: el documento o evidencia ya no debe existir. En una aprobación sí
+deben permanecer la foto de perfil o el logo necesarios para el servicio.
+
 8. SUBIR A GITHUB DESDE VS CODE
 -------------------------------
 Ejecuta:
 
   git status
   git add .
-  git commit -m "Version segura y dinamica de Tarjeta Joven Elota"
+  git commit -m "V10 compresion inteligente y privacidad"
   git push origin main
 
 En cambios futuros repite git add, git commit y git push. Vercel desplegará cada

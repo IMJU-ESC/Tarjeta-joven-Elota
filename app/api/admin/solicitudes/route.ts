@@ -84,7 +84,7 @@ export async function POST(request: Request) {
           codigoUnicoQR: `TJE-${crypto.randomBytes(12).toString("hex").toUpperCase()}`,
         });
         if (typeof payload.fotoPerfil === "string" && payload.fotoPerfil.startsWith("data:")) {
-          const image = await saveDataUrl(payload.fotoPerfil, "jovenes_perfiles", 1_500_000);
+          const image = await saveDataUrl(payload.fotoPerfil, "jovenes_perfiles", 300_000);
           active.fotoPerfil = image.url;
           active.fotoPerfilPath = image.path;
         }
@@ -98,7 +98,7 @@ export async function POST(request: Request) {
           lng: Number(payload.lng),
         });
         if (typeof payload.logo === "string" && payload.logo.startsWith("data:")) {
-          const image = await saveDataUrl(payload.logo, "negocios_logos", 1_500_000);
+          const image = await saveDataUrl(payload.logo, "negocios_logos", 250_000);
           active.logo = image.url;
           active.logoPath = image.path;
         }

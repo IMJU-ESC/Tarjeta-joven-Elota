@@ -71,10 +71,10 @@ export default function DirectorioNegocios() {
   );
 
   return (
-    <main className="min-h-screen bg-[#F3F5F9] dark:bg-slate-900 font-sans pb-20 selection:bg-[#D65F08] selection:text-white transition-colors">
+    <main className="min-h-screen bg-[#F3F5F9] dark:bg-slate-900 font-sans pb-20 selection:bg-[#0F766E] selection:text-white transition-colors">
       
       {/* ENCABEZADO INSTITUCIONAL */}
-      <div className="bg-[#D65F08] dark:bg-slate-900 pt-6 pb-16 px-4 rounded-b-[3rem] shadow-xl relative z-10 border-b-4 border-[#F57C00]">
+      <div className="bg-[#0F766E] dark:bg-slate-900 pt-6 pb-16 px-4 rounded-b-[3rem] shadow-xl relative z-10 border-b-4 border-[#0F766E]">
         
         {/* BOTÓN REGRESAR */}
         <div className="max-w-4xl mx-auto flex justify-start mb-2">
@@ -90,7 +90,7 @@ export default function DirectorioNegocios() {
             <img src="/imju-elota.webp" alt="IMJU" className="w-full h-full object-contain filter brightness-0 invert" />
           </div>
           <h1 className="text-3xl md:text-4xl font-black text-white mb-2 tracking-tight drop-shadow-md">Directorio Aliado</h1>
-          <p className="text-orange-200 dark:text-orange-400 text-xs md:text-sm font-medium uppercase tracking-widest flex items-center gap-2">
+          <p className="text-teal-200 dark:text-teal-400 text-xs md:text-sm font-medium uppercase tracking-widest flex items-center gap-2">
             <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
             Descubre dónde usar tu Tarjeta Joven
           </p>
@@ -108,20 +108,20 @@ export default function DirectorioNegocios() {
               placeholder="Buscar por nombre o giro (Ej. Comida)..." 
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
-              className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#D65F08]/20 dark:focus:ring-orange-500/20 transition-all placeholder:text-slate-400"
+              className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#0F766E]/20 dark:focus:ring-teal-500/20 transition-all placeholder:text-slate-400"
             />
             <span className="absolute right-5 top-4 text-slate-400 text-lg">🔍</span>
           </div>
 
           <div className="flex bg-slate-100 dark:bg-slate-700 p-1.5 rounded-2xl w-full md:w-auto flex-shrink-0 shadow-inner">
-            <button onClick={() => setVista("lista")} className={`flex-1 md:px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${vista === "lista" ? "bg-white dark:bg-slate-800 text-[#D65F08] dark:text-orange-400 shadow-md" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"}`}>📋 Lista</button>
-            <button onClick={() => setVista("mapa")} className={`flex-1 md:px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${vista === "mapa" ? "bg-white dark:bg-slate-800 text-[#D65F08] dark:text-orange-400 shadow-md" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"}`}>🗺️ Mapa</button>
+            <button onClick={() => setVista("lista")} className={`flex-1 md:px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${vista === "lista" ? "bg-white dark:bg-slate-800 text-[#0F766E] dark:text-teal-400 shadow-md" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"}`}>📋 Lista</button>
+            <button onClick={() => setVista("mapa")} className={`flex-1 md:px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${vista === "mapa" ? "bg-white dark:bg-slate-800 text-[#0F766E] dark:text-teal-400 shadow-md" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"}`}>🗺️ Mapa</button>
           </div>
         </div>
 
         {cargando ? (
           <div className="flex flex-col items-center justify-center py-20 animate-pulse">
-            <div className="w-14 h-14 border-4 border-[#D65F08]/20 border-t-[#D65F08] rounded-full animate-spin mb-4"></div>
+            <div className="w-14 h-14 border-4 border-[#0F766E]/20 border-t-[#0F766E] rounded-full animate-spin mb-4"></div>
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cargando Aliados...</p>
           </div>
         ) : (
@@ -138,24 +138,24 @@ export default function DirectorioNegocios() {
                   negociosFiltrados.map((n) => (
                     <div key={n.idFirebase} onClick={() => setNegocioSeleccionado(n)} className="bg-white dark:bg-slate-800 rounded-[2rem] p-5 shadow-md hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer border border-slate-100 dark:border-slate-700 flex flex-col group relative overflow-hidden">
                       {/* Efecto hover visual */}
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-[#D65F08]/5 dark:bg-orange-500/10 rounded-bl-full -z-10 group-hover:scale-110 transition-transform"></div>
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-[#0F766E]/5 dark:bg-teal-500/10 rounded-bl-full -z-10 group-hover:scale-110 transition-transform"></div>
                       
                       <div className="flex items-center gap-4 mb-4">
                         <div className="w-16 h-16 rounded-[1.2rem] bg-slate-50 dark:bg-slate-700 border border-slate-100 dark:border-slate-600 overflow-hidden flex-shrink-0 flex items-center justify-center p-2 shadow-sm group-hover:shadow-md transition-shadow">
                           <img src={n.logo || "/imju-elota.webp"} alt={n.nombreComercial} className="w-full h-full object-contain" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <span className="text-[9px] font-black uppercase tracking-widest text-[#F57C00] bg-orange-50 dark:bg-orange-950/40 border border-orange-100 dark:border-orange-900/50 px-2.5 py-1 rounded-md mb-2 inline-block truncate max-w-full">{n.giro}</span>
-                          <h3 className="font-black text-slate-800 dark:text-white leading-tight truncate group-hover:text-[#D65F08] dark:group-hover:text-orange-400 transition-colors text-lg">{n.nombreComercial}</h3>
+                          <span className="text-[9px] font-black uppercase tracking-widest text-[#0F766E] bg-teal-50 dark:bg-teal-950/40 border border-teal-100 dark:border-teal-900/50 px-2.5 py-1 rounded-md mb-2 inline-block truncate max-w-full">{n.giro}</span>
+                          <h3 className="font-black text-slate-800 dark:text-white leading-tight truncate group-hover:text-[#0F766E] dark:group-hover:text-teal-400 transition-colors text-lg">{n.nombreComercial}</h3>
                         </div>
                       </div>
                       
                       <div className="mt-auto pt-4 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
                         <div className="flex -space-x-2">
-                           <span className="w-6 h-6 rounded-full bg-orange-100 text-xs flex items-center justify-center z-10 border border-white">🏷️</span>
+                           <span className="w-6 h-6 rounded-full bg-teal-100 text-xs flex items-center justify-center z-10 border border-white">🏷️</span>
                            <span className="w-6 h-6 rounded-full bg-emerald-100 text-xs flex items-center justify-center z-0 border border-white">🎉</span>
                         </div>
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest group-hover:text-[#D65F08] dark:group-hover:text-orange-400 transition-colors">
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest group-hover:text-[#0F766E] dark:group-hover:text-teal-400 transition-colors">
                           Ver Promos →
                         </p>
                       </div>
@@ -176,8 +176,8 @@ export default function DirectorioNegocios() {
                         <div className="text-center p-2 min-w-[160px]">
                           <img src={n.logo || "/imju-elota.webp"} className="w-14 h-14 mx-auto rounded-xl mb-3 border-2 border-slate-100 object-contain shadow-sm bg-white" />
                           <h4 className="font-black text-slate-800 text-base mb-1 leading-tight">{n.nombreComercial}</h4>
-                          <span className="text-[9px] font-black text-[#F57C00] bg-orange-50 px-2 py-1 rounded-md uppercase tracking-widest block mb-3">{n.giro}</span>
-                          <button onClick={() => setNegocioSeleccionado(n)} className="bg-[#D65F08] hover:bg-slate-900 text-white text-[10px] font-black px-4 py-2.5 rounded-xl uppercase tracking-widest w-full transition-colors shadow-md">Abrir Perfil</button>
+                          <span className="text-[9px] font-black text-[#0F766E] bg-teal-50 px-2 py-1 rounded-md uppercase tracking-widest block mb-3">{n.giro}</span>
+                          <button onClick={() => setNegocioSeleccionado(n)} className="bg-[#0F766E] hover:bg-slate-900 text-white text-[10px] font-black px-4 py-2.5 rounded-xl uppercase tracking-widest w-full transition-colors shadow-md">Abrir Perfil</button>
                         </div>
                       </Popup>
                     </Marker>
@@ -205,13 +205,13 @@ export default function DirectorioNegocios() {
                {/* Barrita para deslizar en celular */}
                <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mb-6 md:hidden"></div>
                
-               <button onClick={() => setNegocioSeleccionado(null)} className="absolute top-6 right-6 w-8 h-8 bg-slate-50 dark:bg-slate-700 rounded-full flex items-center justify-center text-slate-400 hover:text-[#D65F08] shadow-sm font-bold transition-colors">✕</button>
+               <button onClick={() => setNegocioSeleccionado(null)} className="absolute top-6 right-6 w-8 h-8 bg-slate-50 dark:bg-slate-700 rounded-full flex items-center justify-center text-slate-400 hover:text-[#0F766E] shadow-sm font-bold transition-colors">✕</button>
                
                <div className="w-28 h-28 mx-auto rounded-[2rem] bg-white border-4 border-slate-50 dark:border-slate-700 shadow-xl mb-5 overflow-hidden flex items-center justify-center p-2">
                  <img src={negocioSeleccionado.logo || "/imju-elota.webp"} alt="Logo" className="w-full h-full object-contain" />
                </div>
                
-               <span className="text-[10px] font-black uppercase tracking-widest text-[#F57C00] bg-orange-50 dark:bg-orange-950/30 border border-orange-100 dark:border-orange-900/50 px-3 py-1 rounded-full mb-3 inline-block shadow-sm">
+               <span className="text-[10px] font-black uppercase tracking-widest text-[#0F766E] bg-teal-50 dark:bg-teal-950/30 border border-teal-100 dark:border-teal-900/50 px-3 py-1 rounded-full mb-3 inline-block shadow-sm">
                  {negocioSeleccionado.giro}
                </span>
                
@@ -275,20 +275,20 @@ export default function DirectorioNegocios() {
                    </div>
                  ) : (
                    promociones.filter(p => p.idNegocio === negocioSeleccionado.idFirebase).map(promo => (
-                     <div key={promo.idFirebase} className="bg-white dark:bg-slate-800 border border-orange-100 dark:border-orange-900/30 shadow-md p-5 rounded-[2rem] flex flex-col relative overflow-hidden">
-                       <div className="absolute top-0 right-0 w-24 h-24 bg-[#D65F08]/5 dark:bg-orange-500/5 rounded-bl-full pointer-events-none"></div>
+                     <div key={promo.idFirebase} className="bg-white dark:bg-slate-800 border border-teal-100 dark:border-teal-900/30 shadow-md p-5 rounded-[2rem] flex flex-col relative overflow-hidden">
+                       <div className="absolute top-0 right-0 w-24 h-24 bg-[#0F766E]/5 dark:bg-teal-500/5 rounded-bl-full pointer-events-none"></div>
                        
                        <div className="flex items-start justify-between mb-3">
                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-orange-50 dark:bg-orange-950/50 rounded-xl flex items-center justify-center text-xl shadow-inner border border-orange-100 dark:border-orange-900/50">🎟️</div>
-                            <h4 className="font-black text-[#D65F08] dark:text-orange-400 text-lg leading-tight tracking-tight pr-4">{promo.titulo}</h4>
+                            <div className="w-10 h-10 bg-teal-50 dark:bg-teal-950/50 rounded-xl flex items-center justify-center text-xl shadow-inner border border-teal-100 dark:border-teal-900/50">🎟️</div>
+                            <h4 className="font-black text-[#0F766E] dark:text-teal-400 text-lg leading-tight tracking-tight pr-4">{promo.titulo}</h4>
                          </div>
                        </div>
                        
                        <p className="text-xs font-medium text-slate-600 dark:text-slate-300 leading-relaxed mb-4">{promo.descripcion}</p>
                        
                        <div className="flex flex-wrap items-center gap-2 mt-auto">
-                         <span className="text-[9px] font-black text-orange-500 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/40 px-3 py-1.5 rounded-lg border border-orange-100 dark:border-orange-900/50 uppercase tracking-widest">
+                         <span className="text-[9px] font-black text-teal-500 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/40 px-3 py-1.5 rounded-lg border border-teal-100 dark:border-teal-900/50 uppercase tracking-widest">
                            ⏳ Expira: {promo.fechaVencimiento ? new Date(promo.fechaVencimiento).toLocaleDateString() : "Sin fecha"}
                          </span>
                          {promo.nivelRequerido && promo.nivelRequerido !== "Clásica" && (

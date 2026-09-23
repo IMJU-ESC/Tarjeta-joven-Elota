@@ -68,7 +68,7 @@ export const Camera = forwardRef<CameraHandle, NativeCameraProps>(function Nativ
       const contexto = canvas.getContext("2d");
       if (!contexto) return null;
       contexto.drawImage(video, 0, 0, canvas.width, canvas.height);
-      return canvas.toDataURL("image/jpeg", 0.9);
+      return canvas.toDataURL("image/jpeg", 0.82);
     },
   }));
 

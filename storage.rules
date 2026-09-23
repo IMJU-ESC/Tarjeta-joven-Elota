@@ -12,36 +12,36 @@ service firebase.storage {
     }
     function imagenLigera() {
       return request.resource != null
-        && request.resource.size < 2 * 1024 * 1024
+        && request.resource.size < 750 * 1024
         && request.resource.contentType.matches('image/.*');
     }
 
     match /jovenes_perfiles/{archivo=**} {
-      allow read: if true;
+      allow read: if request.auth != null;
       allow write: if administrador();
     }
     match /jovenes_documentos/{archivo=**} {
       allow read, write: if administrador();
     }
     match /negocios_logos/{uid}/{archivo} {
-      allow read: if true;
+      allow read: if administrador() || (negocioActivo() && request.auth.uid == uid);
       allow create, update: if imagenLigera() && (administrador() || (negocioActivo() && request.auth.uid == uid));
       allow delete: if administrador() || (negocioActivo() && request.auth.uid == uid);
     }
     match /negocios_logos/{archivo} {
-      allow read: if true;
+      allow read: if administrador();
       allow write: if administrador();
     }
     match /negocios_evidencias/{archivo=**} {
       allow read, write: if administrador();
     }
     match /promociones/{uid}/{archivo} {
-      allow read: if true;
+      allow read: if request.auth != null;
       allow create, update: if imagenLigera() && negocioActivo() && request.auth.uid == uid;
       allow delete: if administrador() || (negocioActivo() && request.auth.uid == uid);
     }
     match /menus/{uid}/{archivo} {
-      allow read: if true;
+      allow read: if request.auth != null;
       allow create, update: if imagenLigera() && negocioActivo() && request.auth.uid == uid;
       allow delete: if administrador() || (negocioActivo() && request.auth.uid == uid);
     }

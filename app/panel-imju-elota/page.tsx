@@ -4,9 +4,10 @@ import { useState, useRef, useEffect } from "react";
 import { Camera, type CameraHandle } from "@/components/NativeCamera";
 import { collection, addDoc, query, where, getDocs, getDoc, deleteDoc, doc, updateDoc, setDoc } from "firebase/firestore"; 
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
-import { ref, uploadString, getDownloadURL } from "firebase/storage";
+import { ref, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
 import { db, auth, authPersistenceReady, storage } from "../../firebase";
 import { normalizarCorreo } from "@/lib/credenciales";
+import { compressImageDataUrl, readFileAsDataUrl } from "@/lib/client-image";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -364,24 +365,19 @@ export default function PanelAdministrativo() {
     }
   };
 
-  const procesarImagen = (fuenteImagen: string, esLogo: boolean = false) => {
-    const img = new Image(); img.src = fuenteImagen;
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      const MAX_WIDTH = esLogo ? 400 : 300; const MAX_HEIGHT = esLogo ? 400 : 300;
-      let width = img.width; let height = img.height;
-      if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } } 
-      else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
-      canvas.width = width; canvas.height = height;
-      const ctx = canvas.getContext("2d"); ctx?.drawImage(img, 0, 0, width, height);
-      const resultado = canvas.toDataURL("image/jpeg", 0.8);
-      if (esLogo) { setLogoNegocioBase64(resultado); } else { setFotoBase64(resultado); setMostrarCamara(false); }
-    };
+  const procesarImagen = async (fuenteImagen: string, esLogo: boolean = false) => {
+    try {
+      const resultado = await compressImageDataUrl(fuenteImagen, esLogo ? "businessLogo" : "profile");
+      if (esLogo) setLogoNegocioBase64(resultado);
+      else { setFotoBase64(resultado); setMostrarCamara(false); }
+    } catch (error: any) {
+      alert(error?.message || "No pudimos optimizar la imagen.");
+    }
   };
 
-  const manejarSubidaArchivo = (e: React.ChangeEvent<HTMLInputElement>, esLogo: boolean = false) => {
+  const manejarSubidaArchivo = async (e: React.ChangeEvent<HTMLInputElement>, esLogo: boolean = false) => {
     const file = e.target.files?.[0];
-    if (file) { const reader = new FileReader(); reader.onload = (evento) => { if (evento.target?.result) procesarImagen(evento.target.result as string, esLogo); }; reader.readAsDataURL(file); }
+    if (file) await procesarImagen(await readFileAsDataUrl(file), esLogo);
   };
 
   const guardarJoven = async (e: React.FormEvent) => {
@@ -401,10 +397,11 @@ export default function PanelAdministrativo() {
       if (modoEdicion) {
         if (validacion.docs.some(doc => doc.id !== idEditando)) { alert("¡Ese correo ya pertenece a otro joven!"); setCargando(false); return; }
 
+        const registroActual = (await getDoc(doc(db, "jovenes", idEditando))).data();
         let nuevaUrlFoto = fotoBase64;
         let nuevaRutaFoto: string | undefined;
         if (fotoBase64 && fotoBase64.startsWith("data:image")) {
-           const fotoRef = ref(storage, `jovenes_perfiles/${globalThis.crypto.randomUUID()}_perfil_edit.jpg`);
+           const fotoRef = ref(storage, `jovenes_perfiles/${globalThis.crypto.randomUUID()}_perfil_edit.webp`);
            await uploadString(fotoRef, fotoBase64, 'data_url');
            nuevaUrlFoto = await getDownloadURL(fotoRef);
            nuevaRutaFoto = fotoRef.fullPath;
@@ -415,6 +412,9 @@ export default function PanelAdministrativo() {
           correo: correoNormalizado, genero: genero, ocupacion: ocupacion, fotoPerfil: nuevaUrlFoto,
           ...(nuevaRutaFoto ? { fotoPerfilPath: nuevaRutaFoto } : {}),
         });
+        if (nuevaRutaFoto && registroActual?.fotoPerfil) {
+          await deleteObject(ref(storage, registroActual.fotoPerfilPath || registroActual.fotoPerfil)).catch(() => undefined);
+        }
         alert("¡Datos del joven actualizados!");
       } else {
         if (!validacion.empty) { alert("¡Este correo ya está registrado en el sistema!"); setCargando(false); return; }
@@ -440,7 +440,12 @@ export default function PanelAdministrativo() {
   };
 
   const eliminarJoven = async (id: string, nom: string) => {
-    if (window.confirm(`¿Eliminar a ${nom}?`)) { await deleteDoc(doc(db, "jovenes", id)); cargarDirectorio(adminActual.rol); }
+    if (window.confirm(`¿Eliminar a ${nom}?`)) {
+      const registro = (await getDoc(doc(db, "jovenes", id))).data();
+      await deleteDoc(doc(db, "jovenes", id));
+      if (registro?.fotoPerfil) await deleteObject(ref(storage, registro.fotoPerfilPath || registro.fotoPerfil)).catch(() => undefined);
+      cargarDirectorio(adminActual.rol);
+    }
   };
 
   const iniciarAltaJoven = () => {
@@ -498,18 +503,24 @@ export default function PanelAdministrativo() {
       const validacion = await getDocs(q);
       if (validacion.docs.some(doc => doc.id !== idEditandoNegocio)) { alert("¡Ese correo ya pertenece a otro negocio!"); setCargando(false); return; }
 
+      const registroActual = (await getDoc(doc(db, "negocios", idEditandoNegocio))).data();
       let nuevaUrlLogo = logoNegocioBase64;
+      let nuevaRutaLogo: string | undefined;
       if (logoNegocioBase64 && logoNegocioBase64.startsWith("data:image")) {
-         const logoRef = ref(storage, `negocios_logos/${Date.now()}_logo.jpg`);
+         const logoRef = ref(storage, `negocios_logos/${Date.now()}_logo.webp`);
          await uploadString(logoRef, logoNegocioBase64, 'data_url');
          nuevaUrlLogo = await getDownloadURL(logoRef);
+         nuevaRutaLogo = logoRef.fullPath;
       }
 
       await updateDoc(doc(db, "negocios", idEditandoNegocio), {
         nombreComercial: nombreNegocio.trim(), giro: giroNegocio.trim(), correo: correoNormalizado,
-        logo: nuevaUrlLogo, lat: latNegocio, lng: lngNegocio,
+        logo: nuevaUrlLogo, ...(nuevaRutaLogo ? { logoPath: nuevaRutaLogo } : {}), lat: latNegocio, lng: lngNegocio,
         horario: horarioNegocio.trim(), telefono: telefonoNegocio.trim()
       });
+      if (nuevaRutaLogo && registroActual?.logo) {
+        await deleteObject(ref(storage, registroActual.logoPath || registroActual.logo)).catch(() => undefined);
+      }
 
       // ✅ CENTINELA: Actualizar caché
       await setDoc(doc(db, "sistema", "estado"), { ultimaActualizacion: Date.now() }, { merge: true });
@@ -522,7 +533,12 @@ export default function PanelAdministrativo() {
 
   const eliminarNegocio = async (id: string, nom: string) => {
     if (window.confirm(`¿Eliminar definitivamente el negocio ${nom}?`)) { 
+      const registro = (await getDoc(doc(db, "negocios", id))).data();
       await deleteDoc(doc(db, "negocios", id)); 
+      await Promise.all([
+        registro?.logo ? deleteObject(ref(storage, registro.logoPath || registro.logo)).catch(() => undefined) : Promise.resolve(),
+        registro?.menuImagen ? deleteObject(ref(storage, registro.menuImagen)).catch(() => undefined) : Promise.resolve(),
+      ]);
       
       // ✅ CENTINELA: Actualizar caché
       await setDoc(doc(db, "sistema", "estado"), { ultimaActualizacion: Date.now() }, { merge: true });
@@ -639,8 +655,8 @@ export default function PanelAdministrativo() {
      return (
        <main className="min-h-screen bg-[#F3F5F9] flex items-center justify-center">
          <div className="flex flex-col items-center">
-           <div className="w-14 h-14 border-4 border-[#D65F08]/20 border-t-[#D65F08] rounded-full animate-spin mb-4"></div>
-           <p className="text-xs font-black uppercase tracking-widest text-[#D65F08]">Verificando Credenciales...</p>
+           <div className="w-14 h-14 border-4 border-[#0F766E]/20 border-t-[#0F766E] rounded-full animate-spin mb-4"></div>
+           <p className="text-xs font-black uppercase tracking-widest text-[#0F766E]">Verificando Credenciales...</p>
          </div>
        </main>
      );
@@ -648,24 +664,24 @@ export default function PanelAdministrativo() {
 
   if (!adminActual) {
     return (
-      <main className="min-h-screen bg-[#F3F5F9] flex items-center justify-center px-4 md:px-6 selection:bg-[#D65F08] selection:text-white">
+      <main className="min-h-screen bg-[#F3F5F9] flex items-center justify-center px-4 md:px-6 selection:bg-[#0F766E] selection:text-white">
         <div className="bg-white p-10 md:p-12 rounded-[3rem] shadow-2xl max-w-md w-full text-center border border-slate-100 relative animate-fade-in">
-          <div className="w-24 h-24 bg-[#D65F08] rounded-full mx-auto mb-6 flex items-center justify-center shadow-lg shadow-orange-900/20">
+          <div className="w-24 h-24 bg-[#0F766E] rounded-full mx-auto mb-6 flex items-center justify-center shadow-lg shadow-teal-900/20">
             <img src="/imju-elota.webp" alt="IMJU" className="w-14 h-14 object-contain filter brightness-0 invert" />
           </div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight mb-2">Panel Central</h1>
           <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mb-10">Administración IMJU</p>
           
           <form onSubmit={verificarCredenciales}>
-            <input type="email" value={correoAdminInput} onChange={(e) => setCorreoAdminInput(e.target.value)} placeholder="Correo Institucional" className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 text-sm font-bold text-slate-700 outline-none focus:border-[#D65F08] focus:bg-white transition-all mb-4" required />
-            <input type="password" value={passAdminInput} onChange={(e) => setPassAdminInput(e.target.value)} placeholder="Contraseña" className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 text-sm font-bold text-slate-700 outline-none focus:border-[#D65F08] focus:bg-white transition-all mb-8" required />
-            <button disabled={verificandoLogin} className={`w-full font-black py-4.5 rounded-2xl uppercase tracking-widest transition-all shadow-xl ${verificandoLogin ? "bg-slate-400 text-white" : "bg-[#D65F08] text-white hover:bg-slate-900 hover:shadow-2xl active:scale-[0.98]"}`}>
+            <input type="email" value={correoAdminInput} onChange={(e) => setCorreoAdminInput(e.target.value)} placeholder="Correo Institucional" className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 text-sm font-bold text-slate-700 outline-none focus:border-[#0F766E] focus:bg-white transition-all mb-4" required />
+            <input type="password" value={passAdminInput} onChange={(e) => setPassAdminInput(e.target.value)} placeholder="Contraseña" className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 text-sm font-bold text-slate-700 outline-none focus:border-[#0F766E] focus:bg-white transition-all mb-8" required />
+            <button disabled={verificandoLogin} className={`w-full font-black py-4.5 rounded-2xl uppercase tracking-widest transition-all shadow-xl ${verificandoLogin ? "bg-slate-400 text-white" : "bg-[#0F766E] text-white hover:bg-slate-900 hover:shadow-2xl active:scale-[0.98]"}`}>
               {verificandoLogin ? "Autenticando..." : "Ingresar al Sistema"}
             </button>
           </form>
           
           <div className="mt-10 pt-6 border-t border-slate-100">
-             <Link href="/aviso-de-privacidad" target="_blank" className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-[#D65F08] transition-colors">Ver Aviso de Privacidad Oficial</Link>
+             <Link href="/aviso-de-privacidad" target="_blank" className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-[#0F766E] transition-colors">Ver Aviso de Privacidad Oficial</Link>
           </div>
         </div>
       </main>
@@ -673,7 +689,7 @@ export default function PanelAdministrativo() {
   }
 
   return (
-    <main className="min-h-screen bg-[#F3F5F9] font-sans pb-20 selection:bg-[#D65F08] selection:text-white relative">
+    <main className="min-h-screen bg-[#F3F5F9] font-sans pb-20 selection:bg-[#0F766E] selection:text-white relative">
       
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes slide-up { 0% { transform: translateY(100%); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
@@ -698,13 +714,13 @@ export default function PanelAdministrativo() {
         </div>
       )}
 
-      <div className="bg-[#D65F08] pt-10 pb-24 px-4 md:px-8 rounded-b-[3rem] md:rounded-b-[4rem] shadow-2xl relative overflow-hidden">
+      <div className="bg-[#0F766E] pt-10 pb-24 px-4 md:px-8 rounded-b-[3rem] md:rounded-b-[4rem] shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-full opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] pointer-events-none"></div>
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center relative z-10 gap-6">
           <div className="flex items-center gap-5 w-full md:w-auto justify-center md:justify-start">
             <div className="bg-white p-3 rounded-2xl shadow-lg"><img src="/imju-elota.webp" alt="IMJU" className="w-12 h-12 md:w-14 md:h-14 object-contain" /></div>
             <div>
-               <p className="text-orange-200 text-[10px] font-black uppercase tracking-[0.3em] mb-1">Sesión: {adminActual.rol}</p>
+               <p className="text-teal-200 text-[10px] font-black uppercase tracking-[0.3em] mb-1">Sesión: {adminActual.rol}</p>
                <h1 className="text-2xl md:text-4xl font-black text-white text-center md:text-left tracking-tight">Centro de Control</h1>
             </div>
           </div>
@@ -716,8 +732,8 @@ export default function PanelAdministrativo() {
         
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6 mb-8">
           <div className="bg-white rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-8 shadow-xl border border-slate-50 flex items-center justify-between hover:shadow-2xl transition-shadow">
-            <div><p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Jóvenes Activos</p><p className="text-4xl md:text-5xl font-black text-[#D65F08]">{listaJovenes.length}</p></div>
-            <div className="w-14 h-14 md:w-16 md:h-16 bg-orange-50 rounded-[1.5rem] flex items-center justify-center text-2xl md:text-3xl shadow-inner border border-orange-100">🪪</div>
+            <div><p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Jóvenes Activos</p><p className="text-4xl md:text-5xl font-black text-[#0F766E]">{listaJovenes.length}</p></div>
+            <div className="w-14 h-14 md:w-16 md:h-16 bg-teal-50 rounded-[1.5rem] flex items-center justify-center text-2xl md:text-3xl shadow-inner border border-teal-100">🪪</div>
           </div>
           <div className="bg-white rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-8 shadow-xl border border-slate-50 flex items-center justify-between hover:shadow-2xl transition-shadow">
             <div><p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Negocios Aliados</p><p className="text-4xl md:text-5xl font-black text-emerald-600">{listaNegocios.length}</p></div>
@@ -738,14 +754,14 @@ export default function PanelAdministrativo() {
             <button onClick={() => cambiarPestaña("negocios")} className={`whitespace-nowrap px-6 py-3.5 rounded-full text-[10px] font-black uppercase tracking-widest flex-1 md:flex-none text-center transition-all ${pestaña === "negocios" ? "bg-slate-900 text-white shadow-md" : "text-slate-500 hover:bg-slate-100"}`}>Negocios</button>
             <button onClick={() => cambiarPestaña("publicaciones")} className={`whitespace-nowrap px-6 py-3.5 rounded-full text-[10px] font-black uppercase tracking-widest flex-1 md:flex-none text-center transition-all ${pestaña === "publicaciones" ? "bg-slate-900 text-white shadow-md" : "text-slate-500 hover:bg-slate-100"}`}>Moderación</button>
             <button onClick={() => cambiarPestaña("visitas")} className={`whitespace-nowrap px-6 py-3.5 rounded-full text-[10px] font-black uppercase tracking-widest flex-1 md:flex-none text-center transition-all ${pestaña === "visitas" ? "bg-slate-900 text-white shadow-md" : "text-slate-500 hover:bg-slate-100"}`}>Métricas</button>
-            <button onClick={() => cambiarPestaña("avisos")} className={`whitespace-nowrap px-6 py-3.5 rounded-full text-[10px] font-black uppercase tracking-widest flex-1 md:flex-none text-center transition-all ${pestaña === "avisos" ? "bg-[#D65F08] text-white shadow-md" : "text-slate-500 hover:bg-orange-50"}`}>📢 Avisos</button>
+            <button onClick={() => cambiarPestaña("avisos")} className={`whitespace-nowrap px-6 py-3.5 rounded-full text-[10px] font-black uppercase tracking-widest flex-1 md:flex-none text-center transition-all ${pestaña === "avisos" ? "bg-[#0F766E] text-white shadow-md" : "text-slate-500 hover:bg-teal-50"}`}>📢 Avisos</button>
             {adminActual.rol === "Master" && (
                <button onClick={() => cambiarPestaña("equipo")} className={`whitespace-nowrap px-6 py-3.5 rounded-full text-[10px] font-black uppercase tracking-widest flex-1 md:flex-none text-center transition-all ${pestaña === "equipo" ? "bg-slate-900 text-white shadow-md" : "text-slate-500 hover:bg-slate-100"}`}>👮‍♂️ Equipo</button>
             )}
           </div>
           
           <div className="flex gap-2 w-full md:w-auto">
-            {pestaña === "jovenes" && <button onClick={iniciarAltaJoven} className="flex-1 md:flex-none bg-[#D65F08] hover:bg-orange-900 text-white px-5 py-3.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg transition-colors active:scale-95">+ Registrar Joven</button>}
+            {pestaña === "jovenes" && <button onClick={iniciarAltaJoven} className="flex-1 md:flex-none bg-[#0F766E] hover:bg-teal-900 text-white px-5 py-3.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg transition-colors active:scale-95">+ Registrar Joven</button>}
             {pestaña === "negocios" && <button onClick={() => {cancelarEdicionNegocio(); setModalNegocio(true)}} className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg transition-colors active:scale-95">+ Crear Negocio</button>}
             {pestaña === "equipo" && adminActual.rol === "Master" && <button onClick={() => setModalAdmin(true)} className="flex-1 md:flex-none bg-slate-900 hover:bg-black text-white px-5 py-3.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg transition-colors active:scale-95">+ Usuario</button>}
             {(pestaña === "jovenes" || pestaña === "negocios" || pestaña === "visitas") && (
@@ -760,14 +776,14 @@ export default function PanelAdministrativo() {
               <input 
                 type="text" placeholder={`Buscar en ${pestaña === "jovenes" ? "Jóvenes" : "Negocios"} por nombre, correo o código...`} 
                 value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
-                className="w-full bg-slate-50 border-2 border-slate-100 rounded-full px-8 py-4 text-sm font-bold text-slate-700 outline-none focus:border-[#D65F08] focus:bg-white transition-all shadow-inner"
+                className="w-full bg-slate-50 border-2 border-slate-100 rounded-full px-8 py-4 text-sm font-bold text-slate-700 outline-none focus:border-[#0F766E] focus:bg-white transition-all shadow-inner"
               />
               <span className="absolute right-6 top-4.5 text-slate-400 text-lg">🔍</span>
             </div>
           )}
 
           {cargando ? (
-             <div className="flex flex-col items-center justify-center h-64"><div className="w-14 h-14 border-4 border-[#D65F08]/20 border-t-[#D65F08] rounded-full animate-spin mb-4"></div><p className="text-xs font-black uppercase tracking-widest text-slate-400">Procesando Datos...</p></div>
+             <div className="flex flex-col items-center justify-center h-64"><div className="w-14 h-14 border-4 border-[#0F766E]/20 border-t-[#0F766E] rounded-full animate-spin mb-4"></div><p className="text-xs font-black uppercase tracking-widest text-slate-400">Procesando Datos...</p></div>
           ) : (
             <div className="w-full overflow-x-auto scroll-estetico pb-4">
               
@@ -784,9 +800,9 @@ export default function PanelAdministrativo() {
 
                    {subPestañaPendientes === "jovenes" ? (
                      <>
-                       <div className="bg-amber-50 border-l-4 border-amber-500 p-6 rounded-r-2xl mb-8 shadow-sm">
-                          <h3 className="font-black text-amber-800 text-lg mb-1">Validación de Identidad</h3>
-                          <p className="text-sm text-amber-700 font-medium">Comprueba visualmente que la foto de perfil coincida con el documento. <b>Haz clic en las imágenes para verlas en grande.</b></p>
+                       <div className="bg-stone-50 border-l-4 border-stone-500 p-6 rounded-r-2xl mb-8 shadow-sm">
+                          <h3 className="font-black text-stone-800 text-lg mb-1">Validación de Identidad</h3>
+                          <p className="text-sm text-stone-700 font-medium">Comprueba visualmente que la foto de perfil coincida con el documento. <b>Haz clic en las imágenes para verlas en grande.</b></p>
                        </div>
                        <table className="w-full text-left border-collapse">
                           <thead>
@@ -810,7 +826,7 @@ export default function PanelAdministrativo() {
                                             <div className="flex flex-col justify-center pt-2">
                                                <p className="font-black text-slate-900 text-xl tracking-tight">{s.nombreCompleto}</p>
                                                <p className="text-sm font-bold text-slate-500 mb-3">
-                                                  <span className="text-amber-600 font-black">{calcularEdad(s.fechaNacimiento)} años</span> • {s.correo} • {s.genero || 'Género no especificado'}
+                                                  <span className="text-stone-600 font-black">{calcularEdad(s.fechaNacimiento)} años</span> • {s.correo} • {s.genero || 'Género no especificado'}
                                                </p>
                                                <button onClick={() => setImagenCompleta(s.documentoProbatorio)} className="bg-indigo-50 text-indigo-700 font-black text-[10px] uppercase tracking-widest px-5 py-2.5 rounded-[1rem] flex items-center w-fit gap-2 hover:bg-indigo-600 hover:text-white transition-all border border-indigo-100 shadow-sm active:scale-95">
                                                   👀 Ver Documento Probatorio
@@ -893,12 +909,12 @@ export default function PanelAdministrativo() {
                           <tr key={j.idFirebase} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
                             <td className="py-5 pl-2">
                               <div className="flex items-center gap-4">
-                                <img src={j.fotoPerfil} className={`w-14 h-14 rounded-[1rem] object-cover shadow-sm cursor-pointer hover:scale-105 transition-transform ${enPeligro ? 'border-2 border-orange-400' : ''}`} onClick={() => setImagenCompleta(j.fotoPerfil)} />
-                                <div><p className="font-black text-slate-800 text-sm">{j.nombreCompleto}</p><p className="text-[10px] font-bold text-slate-400 mt-0.5"><span className={enPeligro ? 'text-orange-500 font-black' : ''}>{edadCalculada} años</span> {j.localidad ? `• ${j.localidad}` : ""}</p></div>
+                                <img src={j.fotoPerfil} className={`w-14 h-14 rounded-[1rem] object-cover shadow-sm cursor-pointer hover:scale-105 transition-transform ${enPeligro ? 'border-2 border-teal-400' : ''}`} onClick={() => setImagenCompleta(j.fotoPerfil)} />
+                                <div><p className="font-black text-slate-800 text-sm">{j.nombreCompleto}</p><p className="text-[10px] font-bold text-slate-400 mt-0.5"><span className={enPeligro ? 'text-teal-500 font-black' : ''}>{edadCalculada} años</span> {j.localidad ? `• ${j.localidad}` : ""}</p></div>
                               </div>
                             </td>
                             <td className="py-5"><p className="text-xs font-bold text-slate-700 mb-1">{j.ocupacion || "Sin registro"}</p><span className="text-[9px] text-slate-500 font-black uppercase tracking-widest bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">{j.genero || 'NO REGISTRADO'}</span></td>
-                            <td className="py-5"><p className="text-xs font-bold text-slate-700 mb-1">{j.correo}</p><span className="bg-[#D65F08]/10 text-[#D65F08] font-mono text-[10px] font-black px-3 py-1.5 rounded-lg border border-orange-100">{j.codigoUnicoQR}</span></td>
+                            <td className="py-5"><p className="text-xs font-bold text-slate-700 mb-1">{j.correo}</p><span className="bg-[#0F766E]/10 text-[#0F766E] font-mono text-[10px] font-black px-3 py-1.5 rounded-lg border border-teal-100">{j.codigoUnicoQR}</span></td>
                             <td className="py-5 text-right pr-2">
                               <div className="flex flex-col items-end gap-2">
                                 <button onClick={() => reenviarAcceso("joven", j)} className="w-24 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white font-black py-2 rounded-xl text-[9px] uppercase tracking-widest transition-colors active:scale-95 border border-emerald-100">Acceso</button>
@@ -967,7 +983,7 @@ export default function PanelAdministrativo() {
                                       </div>
                                       <p className="text-[10px] text-slate-500 font-medium mb-3 line-clamp-2">{p.descripcion}</p>
                                       <div className="text-[9px] font-bold text-slate-400 space-y-1 mb-4">
-                                         <p>🏪 Negocio: <span className="text-[#D65F08]">{p.nombreNegocio}</span></p>
+                                         <p>🏪 Negocio: <span className="text-[#0F766E]">{p.nombreNegocio}</span></p>
                                          <p>👑 Nivel: {p.nivelRequerido}</p>
                                       </div>
                                    </div>
@@ -998,7 +1014,7 @@ export default function PanelAdministrativo() {
                                       <p className="text-[10px] text-slate-500 font-medium mb-3 line-clamp-2">{e.descripcion}</p>
                                       <div className="text-[9px] font-bold text-slate-400 space-y-1 mb-4 flex justify-between">
                                          <div>
-                                            <p>🏪 Negocio: <span className="text-[#D65F08]">{e.nombreNegocio}</span></p>
+                                            <p>🏪 Negocio: <span className="text-[#0F766E]">{e.nombreNegocio}</span></p>
                                             <p>📞 Contacto: {e.telefonoContacto}</p>
                                          </div>
                                          <div className="text-right">
@@ -1021,7 +1037,7 @@ export default function PanelAdministrativo() {
                 <div className="min-w-[700px] animate-fade-in">
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-slate-50 p-5 rounded-3xl mb-8 gap-4 shadow-inner border border-slate-100">
                     <p className="text-sm font-black text-slate-800 pl-2">Filtrar Historial por Mes:</p>
-                    <input type="month" value={mesSeleccionado} onChange={(e) => setMesSeleccionado(e.target.value)} className="text-xs font-black text-[#D65F08] bg-white px-5 py-3.5 rounded-xl shadow-sm outline-none border border-slate-200 w-full md:w-auto cursor-pointer" />
+                    <input type="month" value={mesSeleccionado} onChange={(e) => setMesSeleccionado(e.target.value)} className="text-xs font-black text-[#0F766E] bg-white px-5 py-3.5 rounded-xl shadow-sm outline-none border border-slate-200 w-full md:w-auto cursor-pointer" />
                   </div>
                   <table className="w-full text-left border-collapse">
                     <thead>
@@ -1041,7 +1057,7 @@ export default function PanelAdministrativo() {
                             <td className="py-5 pl-2 text-[11px] font-black text-slate-500 uppercase">{new Date(v.fecha).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute:'2-digit' })}</td>
                             <td className="py-5 font-black text-emerald-600 text-sm">{v.nombreNegocio}</td>
                             <td className="py-5 text-sm font-black text-slate-800">{v.nombreJoven}</td>
-                            <td className="py-5"><span className="bg-[#D65F08]/10 text-[#D65F08] px-4 py-2 rounded-[1rem] text-[9px] font-black uppercase tracking-widest border border-orange-100/50">{v.nombrePromo}</span></td>
+                            <td className="py-5"><span className="bg-[#0F766E]/10 text-[#0F766E] px-4 py-2 rounded-[1rem] text-[9px] font-black uppercase tracking-widest border border-teal-100/50">{v.nombrePromo}</span></td>
                           </tr>
                         ))
                       )}
@@ -1052,17 +1068,17 @@ export default function PanelAdministrativo() {
 
               {pestaña === "avisos" && (
                 <div className="animate-fade-in max-w-3xl mx-auto">
-                   <div className="bg-gradient-to-br from-orange-50 to-white p-8 md:p-10 rounded-[2.5rem] border border-orange-100 mb-10 shadow-sm">
-                      <h3 className="text-2xl font-black text-[#D65F08] mb-6 tracking-tight">📣 Megáfono del Sistema</h3>
+                   <div className="bg-gradient-to-br from-teal-50 to-white p-8 md:p-10 rounded-[2.5rem] border border-teal-100 mb-10 shadow-sm">
+                      <h3 className="text-2xl font-black text-[#0F766E] mb-6 tracking-tight">📣 Megáfono del Sistema</h3>
                       <form onSubmit={publicarAnuncio} className="space-y-4">
                         <div className="flex flex-col sm:flex-row gap-4">
-                           <select value={audienciaAviso} onChange={e => setAudienciaAviso(e.target.value)} className="bg-white border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-700 outline-none focus:border-[#D65F08] w-full sm:w-1/3 shadow-sm transition-all">
+                           <select value={audienciaAviso} onChange={e => setAudienciaAviso(e.target.value)} className="bg-white border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-700 outline-none focus:border-[#0F766E] w-full sm:w-1/3 shadow-sm transition-all">
                               <option value="Todos">Para Todos</option><option value="Jovenes">Solo Jóvenes</option><option value="Negocios">Solo Negocios</option>
                            </select>
-                           <input type="text" value={tituloAviso} onChange={e => setTituloAviso(e.target.value)} placeholder="Título del Aviso..." className="w-full sm:w-2/3 bg-white border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-700 outline-none focus:border-[#D65F08] shadow-sm transition-all" required />
+                           <input type="text" value={tituloAviso} onChange={e => setTituloAviso(e.target.value)} placeholder="Título del Aviso..." className="w-full sm:w-2/3 bg-white border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-700 outline-none focus:border-[#0F766E] shadow-sm transition-all" required />
                         </div>
-                        <textarea value={mensajeAviso} onChange={e => setMensajeAviso(e.target.value)} placeholder="Escribe el mensaje detallado aquí..." className="w-full bg-white border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-700 outline-none focus:border-[#D65F08] h-32 resize-none shadow-sm transition-all" required></textarea>
-                        <button type="submit" disabled={cargando} className="w-full bg-[#D65F08] text-white font-black py-4.5 rounded-2xl text-[11px] uppercase tracking-widest hover:bg-slate-900 shadow-lg hover:shadow-orange-900/30 transition-all active:scale-95 mt-2">Lanzar Aviso 🚀</button>
+                        <textarea value={mensajeAviso} onChange={e => setMensajeAviso(e.target.value)} placeholder="Escribe el mensaje detallado aquí..." className="w-full bg-white border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-700 outline-none focus:border-[#0F766E] h-32 resize-none shadow-sm transition-all" required></textarea>
+                        <button type="submit" disabled={cargando} className="w-full bg-[#0F766E] text-white font-black py-4.5 rounded-2xl text-[11px] uppercase tracking-widest hover:bg-slate-900 shadow-lg hover:shadow-teal-900/30 transition-all active:scale-95 mt-2">Lanzar Aviso 🚀</button>
                       </form>
                    </div>
                    
@@ -1119,7 +1135,7 @@ export default function PanelAdministrativo() {
           <div className="bg-[#F3F5F9] w-full max-w-2xl max-h-[95vh] md:max-h-[90vh] overflow-y-auto rounded-t-[3rem] md:rounded-[3rem] p-8 shadow-2xl relative scroll-estetico animate-slide-up" onClick={e => e.stopPropagation()}>
             <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto mb-6 md:hidden"></div>
             <button onClick={cancelarEdicionJoven} className="absolute top-6 right-6 w-10 h-10 bg-white rounded-full text-slate-500 hover:bg-red-100 hover:text-red-500 font-bold transition-colors shadow-sm border border-slate-200">✕</button>
-            <h3 className="text-2xl font-black text-[#D65F08] mb-6 tracking-tight text-center">{modoEdicion ? "Editar Registro" : "Alta de Joven (Oficina)"}</h3>
+            <h3 className="text-2xl font-black text-[#0F766E] mb-6 tracking-tight text-center">{modoEdicion ? "Editar Registro" : "Alta de Joven (Oficina)"}</h3>
             
             <form onSubmit={guardarJoven} className="space-y-4">
               
@@ -1129,7 +1145,7 @@ export default function PanelAdministrativo() {
                   <Camera ref={cameraRef} facingMode={camaraFrontal ? "user" : "environment"} aspectRatio={16/9} errorMessages={{}} />
                   <div className="absolute inset-x-0 bottom-4 flex justify-center gap-4">
                      <button type="button" onClick={() => setMostrarCamara(false)} className="bg-white/20 backdrop-blur-md text-white px-6 py-3 rounded-full font-black text-[10px] uppercase tracking-widest border border-white/30">Cancelar</button>
-                     <button type="button" onClick={() => { const foto = cameraRef.current?.takePhoto(); if (foto) setFotoBase64(foto); setMostrarCamara(false); }} className="bg-[#D65F08] text-white px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest shadow-lg border border-orange-900/50">📸 Capturar</button>
+                     <button type="button" onClick={() => { const foto = cameraRef.current?.takePhoto(); if (foto) setFotoBase64(foto); setMostrarCamara(false); }} className="bg-[#0F766E] text-white px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest shadow-lg border border-teal-900/50">📸 Capturar</button>
                   </div>
                   <button type="button" onClick={() => setCamaraFrontal(!camaraFrontal)} className="absolute top-4 right-4 bg-black/40 p-3 rounded-full backdrop-blur-md text-white">🔄</button>
                 </div>
@@ -1141,27 +1157,27 @@ export default function PanelAdministrativo() {
                          📁 Subir Archivo
                          <input type="file" accept="image/*" onChange={(e) => manejarSubidaArchivo(e, false)} className="hidden" />
                       </label>
-                      <button type="button" onClick={() => setMostrarCamara(true)} className="text-[10px] bg-white text-[#D65F08] font-black uppercase tracking-widest px-5 py-3 rounded-xl cursor-pointer hover:bg-orange-50 transition-colors border border-orange-200 shadow-sm flex items-center gap-2">
+                      <button type="button" onClick={() => setMostrarCamara(true)} className="text-[10px] bg-white text-[#0F766E] font-black uppercase tracking-widest px-5 py-3 rounded-xl cursor-pointer hover:bg-teal-50 transition-colors border border-teal-200 shadow-sm flex items-center gap-2">
                          📸 Tomar Foto
                       </button>
                    </div>
                 </div>
               )}
 
-              <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-[#D65F08] font-bold text-slate-700 transition-all outline-none shadow-sm" placeholder="Nombre Completo" required />
+              <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-[#0F766E] font-bold text-slate-700 transition-all outline-none shadow-sm" placeholder="Nombre Completo" required />
               
               <div className="grid grid-cols-2 gap-4">
-                 <input type="date" value={fechaNacimiento} onChange={(e) => setFechaNacimiento(e.target.value)} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-[#D65F08] font-bold text-slate-500 transition-all outline-none shadow-sm" required />
-                 <select value={genero} onChange={(e) => setGenero(e.target.value)} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-[#D65F08] font-bold text-slate-700 transition-all outline-none shadow-sm" required>
+                 <input type="date" value={fechaNacimiento} onChange={(e) => setFechaNacimiento(e.target.value)} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-[#0F766E] font-bold text-slate-500 transition-all outline-none shadow-sm" required />
+                 <select value={genero} onChange={(e) => setGenero(e.target.value)} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-[#0F766E] font-bold text-slate-700 transition-all outline-none shadow-sm" required>
                     <option value="">Género...</option><option value="Mujer">Mujer</option><option value="Hombre">Hombre</option><option value="No Binario">No Binario</option><option value="Prefiero no decir">Prefiero no decir</option>
                  </select>
               </div>
 
-              <input type="text" value={localidad} onChange={(e) => setLocalidad(e.target.value)} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-[#D65F08] font-bold text-slate-700 transition-all outline-none shadow-sm" placeholder="Localidad o Colonia" required />
-              <input type="text" value={ocupacion} onChange={(e) => setOcupacion(e.target.value)} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-[#D65F08] font-bold text-slate-700 transition-all outline-none shadow-sm" placeholder="Ocupación (Ej: Estudiante en UAdeO)" required />
-              <input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-[#D65F08] font-bold text-slate-700 transition-all outline-none shadow-sm" placeholder="Correo Electrónico (Para accesos)" required disabled={modoEdicion} />
+              <input type="text" value={localidad} onChange={(e) => setLocalidad(e.target.value)} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-[#0F766E] font-bold text-slate-700 transition-all outline-none shadow-sm" placeholder="Localidad o Colonia" required />
+              <input type="text" value={ocupacion} onChange={(e) => setOcupacion(e.target.value)} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-[#0F766E] font-bold text-slate-700 transition-all outline-none shadow-sm" placeholder="Ocupación (Ej: Estudiante en UAdeO)" required />
+              <input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-[#0F766E] font-bold text-slate-700 transition-all outline-none shadow-sm" placeholder="Correo Electrónico (Para accesos)" required disabled={modoEdicion} />
               
-              <button type="submit" disabled={cargando} className={`w-full mt-6 text-white font-black py-5 rounded-[2rem] text-xs uppercase tracking-widest transition-all active:scale-95 ${cargando ? "bg-slate-400" : "bg-[#D65F08] hover:bg-slate-900 shadow-xl shadow-orange-900/20"}`}>
+              <button type="submit" disabled={cargando} className={`w-full mt-6 text-white font-black py-5 rounded-[2rem] text-xs uppercase tracking-widest transition-all active:scale-95 ${cargando ? "bg-slate-400" : "bg-[#0F766E] hover:bg-slate-900 shadow-xl shadow-teal-900/20"}`}>
                 {modoEdicion ? "Guardar Cambios" : "Registrar y Activar Joven"}
               </button>
             </form>
