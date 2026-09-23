@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb, requireAdmin } from "@/lib/firebase-admin";
-import { sendSystemMail } from "@/lib/mailer";
+import { publicAppUrl, sendSystemMail } from "@/lib/mailer";
 import { removeStoredFile, saveDataUrl } from "@/lib/server-storage";
 
 export const runtime = "nodejs";
@@ -23,7 +23,7 @@ async function getOrCreateUser(email: string, name: string) {
 }
 
 async function activationLink(email: string, loginPath: string) {
-  const appUrl = (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
+  const appUrl = publicAppUrl();
   const firebaseLink = await adminAuth.generatePasswordResetLink(email, { url: `${appUrl}/${loginPath}`, handleCodeInApp: false });
   try {
     const generated = new URL(firebaseLink);

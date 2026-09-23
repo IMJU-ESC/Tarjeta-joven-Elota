@@ -35,10 +35,11 @@ function publicRegistrationError(error: any) {
   const code = typeof error?.code === "string" ? error.code : "";
 
   if (error?.name === "FirebaseAdminConfigurationError" || message.includes("FIREBASE_ADMIN")) {
+    const entorno = process.env.VERCEL_ENV === "preview" ? "Preview" : process.env.VERCEL_ENV === "production" ? "Producción" : "actual";
     return {
       status: 503,
       code: "CONFIG_ADMIN",
-      error: "El servicio de registro no está completamente configurado en Vercel. Revisa FIREBASE_ADMIN_CLIENT_EMAIL y FIREBASE_ADMIN_PRIVATE_KEY.",
+      error: `El entorno ${entorno} de Vercel no tiene habilitadas las credenciales privadas de Firebase Admin. Activa FIREBASE_ADMIN_CLIENT_EMAIL y FIREBASE_ADMIN_PRIVATE_KEY para este entorno y vuelve a desplegar.`,
     };
   }
   if (code.includes("storage") || code === 404 || /bucket|storage/i.test(message)) {

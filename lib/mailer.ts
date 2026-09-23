@@ -5,6 +5,12 @@ type MailKind = "activation_youth" | "activation_business" | "activation_admin" 
 const escapeHtml = (value: string) =>
   value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
 
+export function publicAppUrl() {
+  const previewUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "";
+  const preferred = process.env.VERCEL_ENV === "preview" ? previewUrl : process.env.APP_URL || previewUrl;
+  return (preferred || "http://localhost:3000").replace(/\/$/, "");
+}
+
 export async function sendSystemMail(input: {
   kind: MailKind;
   to: string;
@@ -16,7 +22,7 @@ export async function sendSystemMail(input: {
   const password = process.env.EMAIL_APP_PASSWORD?.trim();
   if (!user || !password) throw new Error("El correo institucional no está configurado.");
 
-  const appUrl = (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
+  const appUrl = publicAppUrl();
   const name = escapeHtml(input.name);
   const actionLink = input.actionLink ? escapeHtml(input.actionLink) : "";
   const reason = escapeHtml(input.reason || "Información incompleta");

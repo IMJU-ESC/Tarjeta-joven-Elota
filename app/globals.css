@@ -2,11 +2,11 @@
 
 :root {
   --brand-primary: #0F766E;
-  --brand-accent: #64748B;
-  --brand-yellow: #94A3B8;
-  --brand-green: #5F766D;
-  --brand-cyan: #78909C;
-  --brand-pink: #7C7896;
+  --brand-accent: #6366F1;
+  --brand-yellow: #A78BFA;
+  --brand-green: #22C55E;
+  --brand-cyan: #06B6D4;
+  --brand-pink: #EC4899;
   --font-app: "Aptos", "Segoe UI Variable", "Inter", "Avenir Next", system-ui, sans-serif;
   --font-display: "Aptos Display", "Segoe UI Variable Display", "Trebuchet MS", var(--font-app);
 }
@@ -55,8 +55,8 @@ button, a {
   background-image:
     url("/imju-elota.webp"),
     url("/ayuntamiento-elota.webp"),
-    radial-gradient(circle at 18% 22%, rgba(100,116,139,.75), transparent 22%),
-    radial-gradient(circle at 82% 74%, rgba(100,116,139,.48), transparent 24%);
+    radial-gradient(circle at 18% 22%, rgba(99,102,241,.52), transparent 22%),
+    radial-gradient(circle at 82% 74%, rgba(6,182,212,.38), transparent 24%);
   background-repeat: no-repeat;
   background-position: left -115px top 16%, right -145px bottom 14%, left top, right bottom;
   background-size: min(32vw, 320px) auto, min(35vw, 350px) auto, 55% 55%, 55% 55%;
@@ -121,7 +121,7 @@ button, a {
   border: 1px solid transparent !important;
   background:
     linear-gradient(rgba(255,255,255,.94), rgba(255,255,255,.94)) padding-box,
-    linear-gradient(100deg, rgba(100,116,139,.5), rgba(148,163,184,.42), rgba(95,118,109,.4), rgba(120,144,156,.48), rgba(124,120,150,.4)) border-box !important;
+    linear-gradient(100deg, rgba(99,102,241,.52), rgba(167,139,250,.48), rgba(34,197,94,.42), rgba(6,182,212,.52), rgba(236,72,153,.44)) border-box !important;
   box-shadow: 0 12px 34px rgba(30,41,59,.08);
 }
 
@@ -129,7 +129,7 @@ button, a {
 .brand-mini-card.brand-mini-dark {
   background:
     linear-gradient(rgba(15,23,42,.94), rgba(15,23,42,.94)) padding-box,
-    linear-gradient(100deg, rgba(100,116,139,.5), rgba(148,163,184,.42), rgba(95,118,109,.4), rgba(120,144,156,.48), rgba(124,120,150,.4)) border-box !important;
+    linear-gradient(100deg, rgba(99,102,241,.58), rgba(167,139,250,.5), rgba(34,197,94,.44), rgba(6,182,212,.56), rgba(236,72,153,.5)) border-box !important;
 }
 
 .brand-card-watermark {

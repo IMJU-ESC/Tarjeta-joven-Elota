@@ -15,6 +15,9 @@ const TileLayer = dynamic(() => import("react-leaflet").then((mod) => mod.TileLa
 const Marker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), { ssr: false });
 const Popup = dynamic(() => import("react-leaflet").then((mod) => mod.Popup), { ssr: false });
 
+const INSTAGRAM_URL = "https://www.instagram.com/imjuelotamx?stkn=M24xYzdweDVzMDI3";
+const FACEBOOK_URL = "https://www.facebook.com/profile.php?id=100075974077385";
+
 export default function TarjetaDigital() {
   const [datosJoven, setDatosJoven] = useState<any>(null);
   const [pestañaActiva, setPestañaActiva] = useState("promos"); 
@@ -559,6 +562,15 @@ export default function TarjetaDigital() {
           <div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-3"><p className={`truncate text-xs font-black ${modoOscuro ? "text-white" : "text-slate-900"}`}>{rutaCompleta ? "Explorador de Elota" : "Tu ruta joven"}</p><span className="text-[9px] font-black text-teal-500">{totalMisiones}/5</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-teal-400 to-pink-500" style={{ width: `${(totalMisiones / misiones.length) * 100}%` }}></div></div></div>
           <span className="shrink-0 text-slate-400">›</span>
         </button>
+      </section>
+
+      <section className="mx-auto mt-3 grid w-full max-w-md grid-cols-2 gap-3 px-6" aria-label="Redes sociales de IMJU Elota">
+        <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer" className="interactive-card flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 to-pink-600 px-4 py-3 text-[10px] font-black uppercase tracking-wider text-white shadow-lg shadow-pink-900/15" aria-label="Abrir Instagram de IMJU Elota">
+          <span aria-hidden="true" className="text-base">◎</span> Instagram
+        </a>
+        <a href={FACEBOOK_URL} target="_blank" rel="noopener noreferrer" className="interactive-card flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-600 px-4 py-3 text-[10px] font-black uppercase tracking-wider text-white shadow-lg shadow-blue-900/15" aria-label="Abrir Facebook de IMJU Elota">
+          <span aria-hidden="true" className="text-base font-black">f</span> Facebook
+        </a>
       </section>
       </div>
 
