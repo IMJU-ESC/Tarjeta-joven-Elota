@@ -38,10 +38,12 @@ function publicRegistrationError(error: any) {
 
   if (error?.name === "FirebaseAdminConfigurationError" || message.includes("FIREBASE_ADMIN")) {
     const entorno = process.env.VERCEL_ENV === "preview" ? "Preview" : process.env.VERCEL_ENV === "production" ? "Producción" : "actual";
+    const missing = message.match(/Faltan variables privadas del servidor: (.+)\.$/)?.[1] ||
+      "FIREBASE_ADMIN_PROJECT_ID, FIREBASE_ADMIN_CLIENT_EMAIL o FIREBASE_ADMIN_PRIVATE_KEY";
     return {
       status: 503,
       code: "CONFIG_ADMIN",
-      error: `El entorno ${entorno} de Vercel no tiene habilitadas las credenciales privadas de Firebase Admin. Activa FIREBASE_ADMIN_CLIENT_EMAIL y FIREBASE_ADMIN_PRIVATE_KEY para este entorno y vuelve a desplegar.`,
+      error: `El entorno ${entorno} de Vercel no tiene habilitadas todas las credenciales privadas de Firebase Admin. Falta: ${missing}.`,
     };
   }
   if (code.includes("storage") || code === 404 || /bucket|storage/i.test(message)) {
