@@ -7,6 +7,9 @@ import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, authPersistenceReady, db } from "../firebase";
 
+const INSTAGRAM_URL = "https://www.instagram.com/imjuelotamx?stkn=M24xYzdweDVzMDI3";
+const FACEBOOK_URL = "https://www.facebook.com/profile.php?id=100075974077385";
+
 export default function Inicio() {
   const router = useRouter();
   const [revisando, setRevisando] = useState(true);
@@ -36,7 +39,7 @@ export default function Inicio() {
     return (
       <main className="grid min-h-screen place-items-center bg-[#080d18] text-white">
         <div className="text-center">
-          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-white/10 border-t-orange-400"></div>
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-white/10 border-t-teal-400"></div>
           <p className="text-[10px] font-black uppercase tracking-[.3em] text-slate-400">Preparando tu experiencia</p>
         </div>
       </main>
@@ -44,10 +47,10 @@ export default function Inicio() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#080d18] font-sans text-white selection:bg-orange-500/30">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_15%,rgba(245,124,0,.22),transparent_30%),radial-gradient(circle_at_85%_20%,rgba(36,181,214,.17),transparent_28%),radial-gradient(circle_at_55%_90%,rgba(247,4,118,.12),transparent_35%)]"></div>
-      <div className="brand-orb absolute -left-24 top-24 h-72 w-72 rounded-full bg-orange-500/10 blur-3xl"></div>
-      <div className="brand-orb brand-orb-delay absolute -right-20 bottom-20 h-80 w-80 rounded-full bg-cyan-500/10 blur-3xl"></div>
+    <main className="relative min-h-screen overflow-hidden bg-[#080d18] font-sans text-white selection:bg-teal-500/30">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_15%,rgba(99,102,241,.24),transparent_30%),radial-gradient(circle_at_85%_20%,rgba(6,182,212,.18),transparent_28%),radial-gradient(circle_at_55%_90%,rgba(236,72,153,.14),transparent_35%)]"></div>
+      <div className="brand-orb absolute -left-24 top-24 h-72 w-72 rounded-full bg-indigo-500/15 blur-3xl"></div>
+      <div className="brand-orb brand-orb-delay absolute -right-20 bottom-20 h-80 w-80 rounded-full bg-cyan-500/12 blur-3xl"></div>
 
       <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-5 py-6 md:px-10 md:py-9">
         <header className="brand-header-card brand-header-dark motion-enter flex items-center justify-between px-4 py-3 md:px-6">
@@ -56,7 +59,7 @@ export default function Inicio() {
               <img src="/imju-elota.webp" alt="IMJU Elota" />
             </div>
             <div>
-              <p className="text-[8px] font-black uppercase tracking-[.28em] text-orange-300">IMJU Elota</p>
+              <p className="text-[8px] font-black uppercase tracking-[.28em] text-teal-300">IMJU Elota</p>
               <p className="text-sm font-black tracking-tight">Tarjeta Joven</p>
             </div>
           </div>
@@ -65,23 +68,23 @@ export default function Inicio() {
 
         <div className="grid flex-1 items-center gap-10 py-12 lg:grid-cols-[1.08fr_.92fr] lg:py-16">
           <section className="motion-enter-delay-1 max-w-2xl">
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-orange-300/20 bg-orange-400/10 px-4 py-2 text-[9px] font-black uppercase tracking-[.2em] text-orange-200">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-orange-400"></span>
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-violet-300/25 bg-violet-400/10 px-4 py-2 text-[9px] font-black uppercase tracking-[.2em] text-violet-200">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-fuchsia-400"></span>
               Beneficios que se viven
             </div>
             <h1 className="display-type text-5xl font-black leading-[.94] tracking-[-.055em] sm:text-6xl md:text-7xl">
               Tu ciudad.<br />
               Tus beneficios.<br />
-              <span className="bg-gradient-to-r from-orange-400 via-yellow-300 to-pink-400 bg-clip-text text-transparent">Tu siguiente nivel.</span>
+              <span className="bg-gradient-to-r from-cyan-300 via-violet-400 to-pink-400 bg-clip-text text-transparent">Tu siguiente nivel.</span>
             </h1>
             <p className="mt-7 max-w-xl text-sm font-medium leading-7 text-slate-300 md:text-base">Descubre promociones, oportunidades y negocios de Elota mientras haces crecer tu tarjeta con cada visita.</p>
 
             <div className="mt-8 flex flex-wrap gap-3">
               {[
-                ["01", "Regístrate"], ["02", "Activa tu QR"], ["03", "Suma experiencias"],
-              ].map(([number, label]) => (
+                ["01", "Regístrate", "text-cyan-300"], ["02", "Activa tu QR", "text-violet-300"], ["03", "Suma experiencias", "text-pink-300"],
+              ].map(([number, label, color]) => (
                 <div key={number} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[.05] px-4 py-3">
-                  <span className="text-[9px] font-black text-orange-300">{number}</span>
+                  <span className={`text-[9px] font-black ${color}`}>{number}</span>
                   <span className="text-[10px] font-black uppercase tracking-wider text-slate-200">{label}</span>
                 </div>
               ))}
@@ -89,21 +92,21 @@ export default function Inicio() {
           </section>
 
           <section className="motion-enter-delay-2 grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
-            <Link href="/login" className="interactive-card shine-sweep group relative overflow-hidden rounded-[2.3rem] border border-orange-300/20 bg-gradient-to-br from-orange-500 to-[#d95309] p-6 shadow-2xl shadow-orange-950/20 hover:shadow-orange-500/20 active:scale-[.98]">
+            <Link href="/login" className="interactive-card shine-sweep group relative overflow-hidden rounded-[2.3rem] border border-indigo-300/25 bg-gradient-to-br from-indigo-500 via-violet-600 to-fuchsia-600 p-6 shadow-2xl shadow-indigo-950/25 hover:shadow-violet-500/25 active:scale-[.98]">
               <div className="brand-swarm" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
-              <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-yellow-300/30 blur-2xl transition group-hover:scale-125"></div>
+              <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-cyan-300/25 blur-2xl transition group-hover:scale-125"></div>
               <div className="relative flex items-center justify-between gap-5">
                 <div>
                   <span className="inline-grid h-12 w-12 place-items-center rounded-2xl bg-white/20 text-2xl ring-1 ring-white/20">🪪</span>
-                  <p className="mt-6 text-[9px] font-black uppercase tracking-[.25em] text-orange-100">Experiencia joven</p>
+                  <p className="mt-6 text-[9px] font-black uppercase tracking-[.25em] text-violet-100">Experiencia joven</p>
                   <h2 className="mt-1 text-3xl font-black tracking-tight">Mi tarjeta</h2>
-                  <p className="mt-2 max-w-xs text-xs font-medium leading-5 text-orange-50/80">Entra, muestra tu QR, completa misiones y desbloquea nuevos niveles.</p>
+                  <p className="mt-2 max-w-xs text-xs font-medium leading-5 text-indigo-50/85">Entra, muestra tu QR, completa misiones y desbloquea nuevos niveles.</p>
                 </div>
-                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-white text-xl font-black text-orange-600 transition group-hover:translate-x-1">→</span>
+                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-white text-xl font-black text-violet-600 transition group-hover:translate-x-1">→</span>
               </div>
             </Link>
 
-            <Link href="/login-negocio" className="interactive-card shine-sweep group relative overflow-hidden rounded-[2.3rem] border border-emerald-300/20 bg-gradient-to-br from-emerald-500 to-teal-700 p-6 shadow-2xl shadow-emerald-950/20 hover:shadow-emerald-500/20 active:scale-[.98]">
+            <Link href="/login-negocio" className="interactive-card shine-sweep group relative overflow-hidden rounded-[2.3rem] border border-cyan-200/25 bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-700 p-6 shadow-2xl shadow-cyan-950/20 hover:shadow-cyan-500/20 active:scale-[.98]">
               <div className="brand-swarm" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
               <div className="absolute -bottom-12 -left-10 h-40 w-40 rounded-full bg-cyan-300/20 blur-2xl transition group-hover:scale-125"></div>
               <div className="relative flex items-center justify-between gap-5">
@@ -125,7 +128,8 @@ export default function Inicio() {
             <div><p className="text-[9px] font-black uppercase tracking-widest text-slate-300">La Cruz, Elota</p><p className="text-[9px] text-slate-500">Av. Gabriel Leyva S/N, Centro</p></div>
           </div>
           <div className="flex flex-wrap justify-center gap-2">
-            <a href="https://www.facebook.com/profile.php?id=100075974077385" target="_blank" rel="noopener noreferrer" className="rounded-full bg-white/5 px-4 py-2 text-[9px] font-black uppercase tracking-widest text-slate-300 hover:bg-white/10">Facebook</a>
+            <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer" className="rounded-full bg-gradient-to-r from-violet-600/80 to-pink-600/80 px-4 py-2 text-[9px] font-black uppercase tracking-widest text-white transition hover:brightness-110">◎ Instagram</a>
+            <a href={FACEBOOK_URL} target="_blank" rel="noopener noreferrer" className="rounded-full bg-blue-600/80 px-4 py-2 text-[9px] font-black uppercase tracking-widest text-white transition hover:bg-blue-500">f Facebook</a>
             <Link href="/aviso-de-privacidad" className="rounded-full bg-white/5 px-4 py-2 text-[9px] font-black uppercase tracking-widest text-slate-300 hover:bg-white/10">Privacidad</Link>
             <Link href="/panel-imju-elota" className="rounded-full bg-white/5 px-4 py-2 text-[9px] font-black uppercase tracking-widest text-slate-300 hover:bg-white/10">Administración</Link>
           </div>

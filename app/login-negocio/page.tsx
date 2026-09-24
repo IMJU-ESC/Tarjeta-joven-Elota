@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { sendPasswordResetEmail, signInWithEmailAndPassword } from "firebase/auth";
 import { auth, authPersistenceReady } from "../../firebase";
 import { normalizarCorreo } from "@/lib/credenciales";
+import { compressImageDataUrl, readFileAsDataUrl } from "@/lib/client-image";
 import dynamic from "next/dynamic";
 import "leaflet/dist/leaflet.css";
 
@@ -50,29 +51,17 @@ export default function LoginRegistroNegocios() {
     });
   }, []);
 
-  const procesarImagen = (e: React.ChangeEvent<HTMLInputElement>, tipo: "logo" | "evidencia") => {
+  const procesarImagen = async (e: React.ChangeEvent<HTMLInputElement>, tipo: "logo" | "evidencia") => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (evento) => {
-        if (evento.target?.result) {
-          const img = new Image();
-          img.src = evento.target.result as string;
-          img.onload = () => {
-            const canvas = document.createElement("canvas");
-            const MAX_WIDTH = 500; const MAX_HEIGHT = 500;
-            let width = img.width; let height = img.height;
-            if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } } 
-            else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
-            canvas.width = width; canvas.height = height;
-            const ctx = canvas.getContext("2d"); ctx?.drawImage(img, 0, 0, width, height);
-            const resultado = canvas.toDataURL("image/jpeg", 0.8);
-            if(tipo === "logo") setLogoBase64(resultado);
-            else setEvidenciaBase64(resultado);
-          };
-        }
-      };
-      reader.readAsDataURL(file);
+      try {
+        const source = await readFileAsDataUrl(file);
+        const result = await compressImageDataUrl(source, tipo === "logo" ? "businessLogo" : "facade");
+        if (tipo === "logo") setLogoBase64(result);
+        else setEvidenciaBase64(result);
+      } catch (error: any) {
+        alert(error?.message || "No pudimos optimizar la imagen.");
+      }
     }
   };
 
@@ -99,24 +88,31 @@ export default function LoginRegistroNegocios() {
 
     setCargando(true);
     try {
+      const payload = JSON.stringify({
+        tipo: "negocio",
+        nombreComercial: nombre.trim(),
+        giro: giro.trim(),
+        correo: normalizarCorreo(correoReg),
+        logo: logoBase64,
+        evidenciaFachada: evidenciaBase64,
+        lat,
+        lng,
+        horario: horario.trim(),
+        telefono: telefono.trim(),
+        aceptoTerminos: true,
+      });
+      if (new Blob([payload]).size > 3_800_000) {
+        throw new Error("Las imágenes pesan demasiado. Selecciona imágenes más ligeras e inténtalo nuevamente.");
+      }
+
       const response = await fetch("/api/registro", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tipo: "negocio",
-          nombreComercial: nombre.trim(),
-          giro: giro.trim(),
-          correo: normalizarCorreo(correoReg),
-          logo: logoBase64,
-          evidenciaFachada: evidenciaBase64,
-          lat,
-          lng,
-          horario: horario.trim(),
-          telefono: telefono.trim(),
-          aceptoTerminos: true,
-        }),
+        body: payload,
       });
-      const result = await response.json().catch(() => ({}));
+      const rawResult = await response.text();
+      const result = (() => { try { return JSON.parse(rawResult); } catch { return {}; } })();
+      if (response.status === 413) throw new Error("Las imágenes exceden el tamaño permitido. Selecciona imágenes más ligeras.");
       if (!response.ok) throw new Error(result.error || "No fue posible enviar la solicitud.");
 
       setRegistroExitoso(true);
@@ -245,7 +241,7 @@ export default function LoginRegistroNegocios() {
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-start gap-3 mt-4">
                    <input type="checkbox" id="terminos" checked={aceptaTerminos} onChange={e => setAceptaTerminos(e.target.checked)} className="mt-1 w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500" />
                    <label htmlFor="terminos" className="text-[10px] text-slate-600 font-medium leading-relaxed">
-                     Declaro que la información es verídica. He leído y acepto los <a href="/aviso-de-privacidad" target="_blank" className="text-emerald-700 font-bold underline">Términos, Condiciones y Aviso de Privacidad</a>. Comprendo que mi negocio es el <strong>único responsable legal y comercial</strong> de las promociones y ofertas de empleo publicadas en esta plataforma, deslindando al IMJU de toda responsabilidad.
+                     Declaro que la información es verídica. He leído y acepto los <a href="/aviso-de-privacidad" target="_blank" className="text-emerald-700 font-bold underline">Términos, Condiciones y Aviso de Privacidad</a>. Comprendo que la evidencia de fachada se utilizará sólo para validar la solicitud y se eliminará al aprobarla o rechazarla. Mi negocio es el <strong>único responsable legal y comercial</strong> de las promociones y ofertas de empleo publicadas en esta plataforma, deslindando al IMJU de toda responsabilidad.
                    </label>
                 </div>
 

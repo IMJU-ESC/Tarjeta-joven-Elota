@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { collection, query, where, getDocs, addDoc, deleteDoc, doc, updateDoc, setDoc, getDoc } from "firebase/firestore";
+import { collection, query, where, getDocs, addDoc, deleteDoc, doc, updateDoc, setDoc, getDoc, limit } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { EmailAuthProvider, onAuthStateChanged, reauthenticateWithCredential, signOut, updatePassword } from "firebase/auth";
 import { auth, db, storage } from "../../firebase"; 
@@ -113,6 +113,20 @@ export default function PortalNegocios() {
     }
   };
 
+  const ejecutarTarjetaSegura = async (payload: Record<string, unknown>) => {
+    const user = auth.currentUser;
+    if (!user) throw new Error("La sesión del negocio terminó. Vuelve a ingresar.");
+    const token = await user.getIdToken();
+    const response = await fetch("/api/negocio/tarjeta", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "No fue posible completar la operación.");
+    return result;
+  };
+
   useEffect(() => {
     import("leaflet").then((L) => {
       delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -212,46 +226,11 @@ export default function PortalNegocios() {
     }
 
     try {
-      // Una sola condición evita requerir un índice compuesto de Firestore.
-      const res = await getDocs(query(collection(db, "tarjetas"), where("codigoUnicoQR", "==", codigoLimpio)));
-      if (res.empty) { 
-         audioError.current?.play().catch(()=>{}); 
-         setMensajeEscaner("No encontramos ese QR. Ajusta la distancia y vuelve a enfocarlo.");
-         alert("❌ No encontramos una Tarjeta Joven activa con ese código."); 
-         setModoEscaner(true); 
-      } else {
-        let dataJoven: any = { idFirebase: res.docs[0].id, ...res.docs[0].data() };
-        if (dataJoven.estatus !== "Activo") throw new Error("La tarjeta todavía no está activa.");
-        // El negocio solo puede leer sus propias visitas. Consultar por ownerUid
-        // mantiene las reglas cerradas y evita el error permission-denied.
-        const negocioUid = auth.currentUser?.uid;
-        if (!negocioUid) throw new Error("La sesión del negocio ya no está disponible.");
-        const snapVisitas = await getDocs(query(collection(db, "visitas"), where("ownerUid", "==", negocioUid)));
-        
-        const fechaActual = new Date(); let visitasActivas = 0;
-        snapVisitas.forEach(v => {
-          const d = v.data();
-          if (d.youthUid !== dataJoven.idFirebase) return;
-          const diasTranscurridos = (fechaActual.getTime() - new Date(d.fecha).getTime()) / (1000 * 3600 * 24);
-          if (diasTranscurridos <= 90) visitasActivas++;
-        });
-
-        let esCumpleHoy = false;
-        if(dataJoven.fechaNacimiento) {
-           const cumple = new Date(dataJoven.fechaNacimiento);
-           if(cumple.getUTCMonth() === fechaActual.getMonth() && cumple.getUTCDate() === fechaActual.getDate()) { esCumpleHoy = true; }
-        }
-
-        dataJoven.visitasTotales = visitasActivas;
-        dataJoven.nivelUserNum = visitasActivas >= 40 ? 3 : (visitasActivas >= 15 ? 2 : 1);
-        dataJoven.nivelNombre = visitasActivas >= 40 ? "Black" : (visitasActivas >= 15 ? "Oro" : "Clásica");
-        dataJoven.esCumple = esCumpleHoy;
-
-        audioExito.current?.play().catch(()=>{}); 
-        setJovenEscaneado(dataJoven); 
-        setPromoAplicada(""); 
-        setModoEscaner(false);
-      }
+      const result = await ejecutarTarjetaSegura({ accion: "validar", codigoQR: codigoLimpio });
+      audioExito.current?.play().catch(()=>{});
+      setJovenEscaneado(result.tarjeta);
+      setPromoAplicada("");
+      setModoEscaner(false);
     } catch (error: any) { 
       audioError.current?.play().catch(()=>{}); 
       console.error("Validación QR:", error);
@@ -277,7 +256,7 @@ export default function PortalNegocios() {
   };
 
   const cargarAvisos = async () => {
-      const snapAvisos = await getDocs(query(collection(db, "anuncios")));
+      const snapAvisos = await getDocs(query(collection(db, "anuncios"), limit(50)));
       const aTemp: any[] = [];
       snapAvisos.forEach((d) => {
         const data = d.data();
@@ -300,7 +279,7 @@ export default function PortalNegocios() {
   const cargarEstadisticas = async () => {
     if (!datosNegocio) return;
     setCargandoMetricas(true);
-    const snap = await getDocs(query(collection(db, "visitas"), where("ownerUid", "==", datosNegocio.idFirebase)));
+    const snap = await getDocs(query(collection(db, "visitas"), where("ownerUid", "==", datosNegocio.idFirebase), limit(300)));
     const temp: any[] = [];
     snap.forEach((doc) => temp.push({ idVisita: doc.id, ...doc.data() }));
     temp.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
@@ -308,12 +287,12 @@ export default function PortalNegocios() {
   };
 
   const cargarEmpleos = async () => {
-    const snap = await getDocs(query(collection(db, "empleos"), where("ownerUid", "==", datosNegocio.idFirebase)));
+    const snap = await getDocs(query(collection(db, "empleos"), where("ownerUid", "==", datosNegocio.idFirebase), limit(100)));
     const temp: any[] = []; snap.forEach((d) => temp.push({ idFirebase: d.id, ...d.data() })); setListaEmpleos(temp);
   };
 
   const cargarPromos = async () => {
-    const snap = await getDocs(query(collection(db, "promociones"), where("ownerUid", "==", datosNegocio.idFirebase)));
+    const snap = await getDocs(query(collection(db, "promociones"), where("ownerUid", "==", datosNegocio.idFirebase), limit(100)));
     const temp: any[] = []; snap.forEach((d) => temp.push({ idFirebase: d.id, ...d.data() })); setListaPromos(temp);
   };
 
@@ -344,26 +323,32 @@ export default function PortalNegocios() {
 
       if (bloqueadaPorDia) { audioError.current?.play().catch(()=>{}); alert(`❌ RECHAZADA:\nPromo válida solo: ${p.diasValidos}. Hoy es ${hoyTexto}.`); setRegistrandoVisita(false); return; }
       if (p.tipo === "Directa" && p.usoUnico) {
-        if (historialVisitas.some(v => v.idJoven === jovenEscaneado.idFirebase && v.idPromo === p.idFirebase)) {
+        if (historialVisitas.some(v => (v.youthUid || v.idJoven) === jovenEscaneado.idFirebase && v.idPromo === p.idFirebase)) {
           audioError.current?.play().catch(()=>{}); alert("❌ RECHAZADA:\nEste joven ya usó este cupón de Único Uso."); setRegistrandoVisita(false); return;
         }
       }
     }
 
     try {
-      const docRef = await addDoc(collection(db, "visitas"), {
-        ownerUid: auth.currentUser!.uid, youthUid: jovenEscaneado.idFirebase, idNegocio: datosNegocio.idFirebase, nombreNegocio: datosNegocio.nombreComercial, idJoven: jovenEscaneado.idFirebase, nombreJoven: jovenEscaneado.nombreCompleto,
-        generoJoven: jovenEscaneado.genero || "No especificado", idPromo: promoAplicada || "ninguna", nombrePromo: p ? p.titulo : "Visita estándar", fecha: new Date().toISOString()
+      const result = await ejecutarTarjetaSegura({
+        accion: "registrar",
+        codigoQR: jovenEscaneado.codigoUnicoQR,
+        promoId: promoAplicada || "",
       });
-      audioExito.current?.play().catch(()=>{}); setJovenEscaneado(null); setPromoAplicada(""); setUltimaVisitaId(docRef.id); cargarEstadisticas();
-    } catch (e) { audioError.current?.play().catch(()=>{}); }
+      audioExito.current?.play().catch(()=>{}); setJovenEscaneado(null); setPromoAplicada(""); setUltimaVisitaId(result.visitaId); cargarEstadisticas();
+    } catch (error: any) {
+      audioError.current?.play().catch(()=>{});
+      alert(error?.message || "No fue posible registrar la visita.");
+    }
     setRegistrandoVisita(false);
   };
 
   const deshacerUltimaVisita = async () => {
     if (!ultimaVisitaId) return;
-    try { await deleteDoc(doc(db, "visitas", ultimaVisitaId)); setUltimaVisitaId(null); cargarEstadisticas(); alert("✅ Movimiento deshecho."); } 
-    catch(e) { alert("Error al deshacer el movimiento."); }
+    try {
+      await ejecutarTarjetaSegura({ accion: "deshacer", visitaId: ultimaVisitaId });
+      setUltimaVisitaId(null); cargarEstadisticas(); alert("✅ Movimiento deshecho.");
+    } catch (error: any) { alert(error?.message || "Error al deshacer el movimiento."); }
   };
 
   const limpiarFormulario = () => { setTitulo(""); setDescripcion(""); setDireccion(""); setSueldo(""); setTipoEmpleo(""); setTelefono(""); setTipoPromo(""); setVisitasRequeridas(""); setDiasValidos("Todos los días"); setFechaVencimiento(""); setUsoUnico(false); setNivelRequerido("Clásica"); setCreandoModal(null); setImgPromoFile(null); setImgPromoPreview(null); };
@@ -371,9 +356,12 @@ export default function PortalNegocios() {
   const manejarSubidaArchivo = async (e: React.ChangeEvent<HTMLInputElement>, tipo: "promo" | "menu" | "logo") => {
     const file = e.target.files?.[0];
     if (file) {
+      const esLogo = tipo === "logo";
       const opciones = {
-        maxSizeMB: 0.4, 
-        maxWidthOrHeight: 1200,
+        maxSizeMB: esLogo ? 0.15 : 0.28,
+        maxWidthOrHeight: esLogo ? 512 : 1200,
+        initialQuality: esLogo ? 0.76 : 0.7,
+        fileType: "image/webp",
         useWebWorker: true,
       };
 
@@ -409,19 +397,22 @@ export default function PortalNegocios() {
     setGuardandoPerfil(true);
     try {
       let nuevaUrlLogo = datosNegocio.logo;
+      let nuevaRutaLogo = datosNegocio.logoPath;
       if (editLogoFile) {
-         const storageRef = ref(storage, `negocios_logos/${auth.currentUser!.uid}/${Date.now()}_${editLogoFile.name}`); await uploadBytes(storageRef, editLogoFile); nuevaUrlLogo = await getDownloadURL(storageRef);
+         const storageRef = ref(storage, `negocios_logos/${auth.currentUser!.uid}/${Date.now()}_logo.webp`); await uploadBytes(storageRef, editLogoFile); nuevaUrlLogo = await getDownloadURL(storageRef); nuevaRutaLogo = storageRef.fullPath;
       }
       
       await updateDoc(doc(db, "negocios", datosNegocio.idFirebase), { 
           nombreComercial: editNombre.trim(), 
           giro: editGiro.trim(), 
-          logo: nuevaUrlLogo, 
+          logo: nuevaUrlLogo,
+          logoPath: nuevaRutaLogo,
           lat: editLat, 
           lng: editLng,
           horario: editHorario.trim(),
           telefono: editTelefono.trim()
       });
+      if (editLogoFile && datosNegocio.logo) await deleteObject(ref(storage, datosNegocio.logoPath || datosNegocio.logo)).catch(() => undefined);
       
       await actualizarCentinela(); // DISPARAMOS CENTINELA
 
@@ -429,7 +420,8 @@ export default function PortalNegocios() {
           ...datosNegocio, 
           nombreComercial: editNombre.trim(), 
           giro: editGiro.trim(), 
-          logo: nuevaUrlLogo, 
+          logo: nuevaUrlLogo,
+          logoPath: nuevaRutaLogo,
           lat: editLat, 
           lng: editLng,
           horario: editHorario.trim(),
@@ -520,10 +512,11 @@ export default function PortalNegocios() {
   };
 
   const descargarExcelEstadisticas = () => {
-    let csvContent = "\uFEFFFecha,Joven,Género,Promoción\n";
+    let csvContent = "\uFEFFFecha,Identificador anónimo,Promoción\n";
     visitasFiltradas.forEach(v => { 
-      const f = new Date(v.fecha).toLocaleString("es-MX"); const g = v.generoJoven || "No especificado";
-      csvContent += `"${f}","${v.nombreJoven}","${g}","${v.nombrePromo}"\n`; 
+      const f = new Date(v.fecha).toLocaleString("es-MX");
+      const anonimo = String(v.youthUid || v.idJoven || "registro").slice(0, 8);
+      csvContent += `"${f}","${anonimo}","${v.nombrePromo}"\n`; 
     });
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; 
@@ -587,7 +580,7 @@ export default function PortalNegocios() {
 
       {modalRutaAliado && (
         <div className="fixed inset-0 z-[400] grid place-items-center overflow-hidden bg-slate-950/85 p-5 backdrop-blur-md" onClick={() => setModalRutaAliado(false)}>
-          {["#34d399", "#22d3ee", "#f4c425", "#f58220", "#a78bfa", "#f70476"].map((color, index) => (
+          {["#34d399", "#22d3ee", "#f4c425", "#64748B", "#a78bfa", "#f70476"].map((color, index) => (
             <span key={color} className="celebration-spark top-0" style={{ left: `${14 + index * 14}%`, background: color, animationDelay: `${index * .18}s`, ["--spark-x" as string]: `${index % 2 ? 35 : -30}px` }}></span>
           ))}
           <section className="motion-enter relative w-full max-w-sm overflow-hidden rounded-[2.7rem] border border-white/10 bg-gradient-to-br from-emerald-950 to-[#080d18] p-7 text-center text-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
@@ -646,10 +639,10 @@ export default function PortalNegocios() {
              <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2 tracking-tight">Autorización Requerida</h3>
              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mb-6">Esta acción está protegida para evitar que empleados modifiquen los beneficios sin tu permiso.</p>
              <form onSubmit={verificarAutorizacion}>
-               <input type="password" value={passAuth} onChange={(e) => setPassAuth(e.target.value)} placeholder="Contraseña del Negocio" className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-4 text-center text-sm font-bold text-slate-700 dark:text-white outline-none focus:border-[#D65F08] dark:focus:border-orange-400 mb-4" autoFocus required />
+               <input type="password" value={passAuth} onChange={(e) => setPassAuth(e.target.value)} placeholder="Contraseña del Negocio" className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-4 text-center text-sm font-bold text-slate-700 dark:text-white outline-none focus:border-[#0F766E] dark:focus:border-teal-400 mb-4" autoFocus required />
                <div className="flex gap-2">
                  <button type="button" onClick={() => setModalAuth({abierto: false, accion: null})} className="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 font-black py-4 rounded-xl text-[10px] uppercase tracking-widest hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">Cancelar</button>
-                 <button type="submit" className="flex-1 bg-[#D65F08] text-white font-black py-4 rounded-xl text-[10px] uppercase tracking-widest shadow-lg hover:bg-slate-900 dark:hover:bg-orange-900 transition-colors">Desbloquear</button>
+                 <button type="submit" className="flex-1 bg-[#0F766E] text-white font-black py-4 rounded-xl text-[10px] uppercase tracking-widest shadow-lg hover:bg-slate-900 dark:hover:bg-teal-900 transition-colors">Desbloquear</button>
                </div>
              </form>
           </div>
@@ -671,17 +664,17 @@ export default function PortalNegocios() {
              <img src={datosNegocio.logo || "/imju-elota.webp"} alt={datosNegocio.nombreComercial || "Negocio aliado"} />
           </div>
           <div className="min-w-0">
-            <p className="mb-1 bg-gradient-to-r from-emerald-500 via-cyan-500 to-orange-500 bg-clip-text text-[9px] font-black uppercase tracking-[.22em] text-transparent">Aliado Tarjeta Joven</p>
+            <p className="mb-1 bg-gradient-to-r from-emerald-500 via-cyan-500 to-teal-500 bg-clip-text text-[9px] font-black uppercase tracking-[.22em] text-transparent">Aliado Tarjeta Joven</p>
             <h1 className="text-xl font-black text-slate-900 dark:text-white tracking-tighter truncate max-w-[150px] leading-tight">{datosNegocio.nombreComercial}</h1>
           </div>
         </div>
         
         <div className="flex gap-2">
-          <button onClick={alternarTema} className="w-11 h-11 bg-white dark:bg-slate-800 rounded-[1.2rem] flex items-center justify-center shadow-md border border-slate-100 dark:border-slate-700 text-slate-400 dark:text-slate-300 hover:text-amber-500 dark:hover:text-amber-300 transition-colors text-lg">
+          <button onClick={alternarTema} className="w-11 h-11 bg-white dark:bg-slate-800 rounded-[1.2rem] flex items-center justify-center shadow-md border border-slate-100 dark:border-slate-700 text-slate-400 dark:text-slate-300 hover:text-stone-500 dark:hover:text-stone-300 transition-colors text-lg">
              {modoOscuro ? "☀️" : "🌙"}
           </button>
 
-          <button onClick={() => setModalAvisos(true)} className="relative w-11 h-11 bg-white dark:bg-slate-800 rounded-[1.2rem] flex items-center justify-center shadow-md border border-slate-100 dark:border-slate-700 text-slate-400 dark:text-slate-300 hover:text-[#D65F08] dark:hover:text-orange-400 transition-colors text-lg">
+          <button onClick={() => setModalAvisos(true)} className="relative w-11 h-11 bg-white dark:bg-slate-800 rounded-[1.2rem] flex items-center justify-center shadow-md border border-slate-100 dark:border-slate-700 text-slate-400 dark:text-slate-300 hover:text-[#0F766E] dark:hover:text-teal-400 transition-colors text-lg">
              🔔
              {avisosNoLeidos > 0 && <span className="absolute top-2 right-2 w-3 h-3 bg-red-500 border-2 border-white dark:border-slate-800 rounded-full animate-pulse"></span>}
           </button>
@@ -708,7 +701,7 @@ export default function PortalNegocios() {
             <div className="brand-panel bg-white dark:bg-slate-800 rounded-[3rem] dark:shadow-none p-8 text-center border border-slate-50 dark:border-slate-700 relative overflow-hidden">
               <img src="/imju-elota.webp" alt="" aria-hidden="true" className="brand-card-watermark opacity-[.045]" />
               <div className="brand-swarm" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
-              <h2 className="text-sm font-black text-[#D65F08] dark:text-orange-400 mb-8 uppercase tracking-[0.3em]">Validación TPV</h2>
+              <h2 className="text-sm font-black text-[#0F766E] dark:text-teal-400 mb-8 uppercase tracking-[0.3em]">Validación TPV</h2>
               
               {!modoEscaner && !jovenEscaneado && (
                 <button onClick={iniciarEscaner} className="bg-gradient-to-br from-emerald-400 to-emerald-600 text-white font-black py-8 rounded-[2.5rem] shadow-xl shadow-emerald-500/30 w-full flex flex-col items-center gap-3 transition-all hover:scale-[1.02] active:scale-95 group relative overflow-hidden">
@@ -751,13 +744,13 @@ export default function PortalNegocios() {
                 <div className="animate-fade-in bg-emerald-50/30 dark:bg-emerald-900/10 p-4 md:p-6 rounded-[2.5rem] border border-emerald-100 dark:border-emerald-800/50">
                   
                   {jovenEscaneado.esCumple && (
-                     <div className="bg-gradient-to-r from-orange-400 to-orange-500 text-white font-black uppercase tracking-widest text-[10px] py-2 px-4 rounded-full mb-4 animate-bounce shadow-lg">
+                     <div className="bg-gradient-to-r from-teal-400 to-teal-500 text-white font-black uppercase tracking-widest text-[10px] py-2 px-4 rounded-full mb-4 animate-bounce shadow-lg">
                        🎂 ¡Es su cumpleaños hoy! 🎉
                      </div>
                   )}
 
                   <div className="relative inline-block mb-3">
-                    <img src={jovenEscaneado.fotoPerfil} className={`w-20 h-20 rounded-[1.5rem] object-cover border-4 shadow-lg ${jovenEscaneado.esCumple ? 'border-orange-400' : 'border-white dark:border-slate-700'}`} alt="Joven" />
+                    <img src={jovenEscaneado.fotoPerfil} className={`w-20 h-20 rounded-[1.5rem] object-cover border-4 shadow-lg ${jovenEscaneado.esCumple ? 'border-teal-400' : 'border-white dark:border-slate-700'}`} alt="Joven" />
                     <div className="absolute -bottom-2 -right-2 bg-emerald-500 text-white p-1.5 rounded-xl shadow-lg border-2 border-white dark:border-slate-800">
                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
                     </div>
@@ -825,9 +818,9 @@ export default function PortalNegocios() {
 
                             <div className="flex flex-wrap gap-2 items-center">
                               {bloqueadaPorDia ? (
-                                 <span className="text-[8px] font-black px-2 py-1 rounded uppercase tracking-widest bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400">Hoy no aplica ({mensajeDia})</span>
+                                 <span className="text-[8px] font-black px-2 py-1 rounded uppercase tracking-widest bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-400">Hoy no aplica ({mensajeDia})</span>
                               ) : bloqueadaPorCumple ? (
-                                 <span className="text-[8px] font-black px-2 py-1 rounded uppercase tracking-widest bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400">No es Cumpleañero</span>
+                                 <span className="text-[8px] font-black px-2 py-1 rounded uppercase tracking-widest bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-400">No es Cumpleañero</span>
                               ) : (
                                 <>
                                   <span className={`text-[8px] font-black px-2 py-1 rounded uppercase tracking-widest ${p.nivelRequerido === 'Black' ? 'bg-slate-900 text-fuchsia-400' : p.nivelRequerido === 'Oro' ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400' : 'bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'}`}>
@@ -845,7 +838,7 @@ export default function PortalNegocios() {
                     </div>
                   </div>
 
-                  <button onClick={registrarVisita} disabled={registrandoVisita} className={`w-full text-white font-black py-5 rounded-[2rem] shadow-lg mt-6 uppercase text-[11px] tracking-[0.2em] transition-all active:scale-95 ${registrandoVisita ? "bg-slate-400" : "bg-[#D65F08] hover:bg-slate-900 hover:shadow-xl hover:-translate-y-1"}`}>
+                  <button onClick={registrarVisita} disabled={registrandoVisita} className={`w-full text-white font-black py-5 rounded-[2rem] shadow-lg mt-6 uppercase text-[11px] tracking-[0.2em] transition-all active:scale-95 ${registrandoVisita ? "bg-slate-400" : "bg-[#0F766E] hover:bg-slate-900 hover:shadow-xl hover:-translate-y-1"}`}>
                     {registrandoVisita ? "Procesando..." : "Confirmar Movimiento"}
                   </button>
                   <button onClick={() => setJovenEscaneado(null)} className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase mt-6 tracking-widest hover:text-slate-600 dark:hover:text-slate-300 w-full">Cerrar</button>
@@ -858,14 +851,14 @@ export default function PortalNegocios() {
         {/* PANEL MENÚ */}
         {pestañaActiva === "menu" && (
            <div className="animate-fade-in bg-white dark:bg-slate-800 rounded-[3rem] shadow-xl p-6 border border-slate-100 dark:border-slate-700 text-center">
-              <div className="w-16 h-16 bg-orange-50 dark:bg-orange-900/30 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4 border border-orange-100 dark:border-orange-800">📖</div>
+              <div className="w-16 h-16 bg-teal-50 dark:bg-teal-900/30 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4 border border-teal-100 dark:border-teal-800">📖</div>
               <h2 className="text-xl font-black text-slate-900 dark:text-white mb-2 tracking-tight">Mi Menú / Catálogo</h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 font-medium">Esta imagen aparecerá en el Directorio de la Tarjeta Joven para que puedan ver qué ofreces.</p>
 
               {!menuPreview ? (
                  <label className="bg-slate-50 dark:bg-slate-700/50 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-[2.5rem] p-10 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors group">
                     <span className="text-4xl mb-4 group-hover:scale-110 transition-transform">📸</span>
-                    <span className="text-[#D65F08] dark:text-orange-400 font-black uppercase tracking-widest text-[10px]">Seleccionar Imagen</span>
+                    <span className="text-[#0F766E] dark:text-teal-400 font-black uppercase tracking-widest text-[10px]">Seleccionar Imagen</span>
                     <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 font-bold">JPG o PNG</span>
                     <input type="file" accept="image/*" onChange={(e) => manejarSubidaArchivo(e, "menu")} className="hidden" />
                  </label>
@@ -882,7 +875,7 @@ export default function PortalNegocios() {
                        <label className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 font-black py-3.5 rounded-xl cursor-pointer text-[10px] uppercase tracking-widest hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-center shadow-sm">
                          🔄 Cambiar Foto <input type="file" accept="image/*" onChange={(e) => manejarSubidaArchivo(e, "menu")} className="hidden" />
                        </label>
-                       <button onClick={guardarMenu} disabled={guardandoMenu || !menuFile} className={`w-full text-white font-black py-4 rounded-xl text-[10px] uppercase tracking-widest transition-all shadow-md ${guardandoMenu || !menuFile ? "bg-slate-400 dark:bg-slate-600" : "bg-[#D65F08] hover:bg-slate-900"}`}>
+                       <button onClick={guardarMenu} disabled={guardandoMenu || !menuFile} className={`w-full text-white font-black py-4 rounded-xl text-[10px] uppercase tracking-widest transition-all shadow-md ${guardandoMenu || !menuFile ? "bg-slate-400 dark:bg-slate-600" : "bg-[#0F766E] hover:bg-slate-900"}`}>
                           {guardandoMenu ? "Guardando..." : "✅ Guardar en Directorio"}
                        </button>
                     </div>
@@ -896,36 +889,26 @@ export default function PortalNegocios() {
           <div className="space-y-6 animate-fade-in">
             <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-5 rounded-[2rem] shadow-sm border border-slate-100 dark:border-slate-700">
               <h2 className="text-xs font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest">Reporte Mensual</h2>
-              <input type="month" value={mesSeleccionado} onChange={(e) => setMesSeleccionado(e.target.value)} className="text-xs font-black text-[#D65F08] dark:text-orange-400 bg-orange-50 dark:bg-orange-900/30 px-4 py-2.5 rounded-xl outline-none border border-orange-100 dark:border-orange-800/50" />
+              <input type="month" value={mesSeleccionado} onChange={(e) => setMesSeleccionado(e.target.value)} className="text-xs font-black text-[#0F766E] dark:text-teal-400 bg-teal-50 dark:bg-teal-900/30 px-4 py-2.5 rounded-xl outline-none border border-teal-100 dark:border-teal-800/50" />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white dark:bg-slate-800 p-6 rounded-[2.5rem] shadow-lg shadow-slate-200/50 dark:shadow-none text-center border border-slate-50 dark:border-slate-700 relative overflow-hidden">
                 <div className="absolute -right-4 -top-4 text-6xl opacity-5 dark:opacity-10">📈</div>
-                <p className="text-5xl font-black text-[#D65F08] dark:text-orange-400 tracking-tighter">{visitasFiltradas.length}</p>
+                <p className="text-5xl font-black text-[#0F766E] dark:text-teal-400 tracking-tighter">{visitasFiltradas.length}</p>
                 <p className="text-[10px] text-slate-400 dark:text-slate-500 font-black uppercase mt-2 tracking-widest">Visitas Totales</p>
               </div>
               <div className="bg-white dark:bg-slate-800 p-6 rounded-[2.5rem] shadow-lg shadow-slate-200/50 dark:shadow-none text-center border border-slate-50 dark:border-slate-700 relative overflow-hidden">
                 <div className="absolute -right-4 -top-4 text-6xl opacity-5 dark:opacity-10">👥</div>
-                <p className="text-5xl font-black text-emerald-500 dark:text-emerald-400 tracking-tighter">{new Set(visitasFiltradas.map(v => v.idJoven)).size}</p>
+                <p className="text-5xl font-black text-emerald-500 dark:text-emerald-400 tracking-tighter">{new Set(visitasFiltradas.map(v => v.youthUid || v.idJoven)).size}</p>
                 <p className="text-[10px] text-slate-400 dark:text-slate-500 font-black uppercase mt-2 tracking-widest">Clientes Únicos</p>
               </div>
 
               {visitasFiltradas.length > 0 && (
-                 <div className="bg-white dark:bg-slate-800 p-5 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-700 col-span-2">
-                    <h3 className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3 flex items-center justify-center gap-2">Demografía por Género</h3>
-                    <div className="flex justify-around items-center pt-2">
-                       {['Mujer', 'Hombre', 'No Binario'].map(gen => {
-                          const cantidad = visitasFiltradas.filter(v => v.generoJoven === gen).length;
-                          return (
-                              <div key={gen} className="text-center">
-                                <p className="text-2xl font-black text-slate-700 dark:text-slate-200">{cantidad}</p>
-                                <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase mt-1">{gen}</p>
-                              </div>
-                          );
-                       })}
-                    </div>
-                 </div>
+                <div className="col-span-2 rounded-[2.5rem] border border-slate-100 bg-white p-5 text-center shadow-sm dark:border-slate-700 dark:bg-slate-800">
+                  <p className="text-2xl font-black text-violet-500">{Math.max(0, visitasFiltradas.length - new Set(visitasFiltradas.map(v => v.youthUid || v.idJoven)).size)}</p>
+                  <p className="mt-1 text-[9px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Visitas recurrentes · sin mostrar datos personales</p>
+                </div>
               )}
             </div>
 
@@ -946,10 +929,10 @@ export default function PortalNegocios() {
                         <div key={nombre}>
                           <div className="flex justify-between text-xs font-bold mb-1">
                             <span className="text-slate-700 dark:text-slate-200 truncate pr-4">{idx + 1}. {nombre}</span>
-                            <span className="text-[#D65F08] dark:text-orange-400 font-black">{cantidad}</span>
+                            <span className="text-[#0F766E] dark:text-teal-400 font-black">{cantidad}</span>
                           </div>
                           <div className="w-full h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                            <div className="h-full bg-gradient-to-r from-orange-400 to-[#D65F08] dark:from-orange-500 dark:to-orange-800 rounded-full" style={{ width: `${(cantidad / visitasFiltradas.length) * 100}%` }}></div>
+                            <div className="h-full bg-gradient-to-r from-teal-400 to-[#0F766E] dark:from-teal-500 dark:to-teal-800 rounded-full" style={{ width: `${(cantidad / visitasFiltradas.length) * 100}%` }}></div>
                           </div>
                         </div>
                       )})}
@@ -979,7 +962,7 @@ export default function PortalNegocios() {
           <div className="space-y-6 animate-fade-in">
             <div className="flex justify-between items-center px-2 mb-2">
                <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tighter">{pestañaActiva === "promos" ? "Mis Cupones Activos" : "Bolsa de Trabajo"}</h2>
-               <button onClick={() => solicitarAutorizacion(() => setCreandoModal(pestañaActiva === "promos" ? "promo" : "empleo"))} className="bg-[#D65F08] dark:bg-slate-800 text-white dark:text-orange-400 px-5 py-3.5 rounded-[1rem] shadow-lg hover:shadow-xl hover:bg-slate-900 dark:hover:bg-slate-700 transition-all text-[10px] font-black uppercase tracking-widest border border-transparent dark:border-orange-900/50">
+               <button onClick={() => solicitarAutorizacion(() => setCreandoModal(pestañaActiva === "promos" ? "promo" : "empleo"))} className="bg-[#0F766E] dark:bg-slate-800 text-white dark:text-teal-400 px-5 py-3.5 rounded-[1rem] shadow-lg hover:shadow-xl hover:bg-slate-900 dark:hover:bg-slate-700 transition-all text-[10px] font-black uppercase tracking-widest border border-transparent dark:border-teal-900/50">
                  + Nuevo
                </button>
             </div>
@@ -995,7 +978,7 @@ export default function PortalNegocios() {
                 
                 return (
                   <div key={item.idFirebase} className={`bg-white dark:bg-slate-800 rounded-[2.5rem] shadow-sm p-7 border relative group transition-all hover:shadow-lg ${estaExpirado ? "border-red-200 dark:border-red-900/50 opacity-75" : "border-slate-100 dark:border-slate-700 hover:border-emerald-100 dark:hover:border-emerald-800"}`}>
-                    <div className={`absolute top-0 left-0 w-2 h-full transition-colors ${estaExpirado ? "bg-red-400 dark:bg-red-700" : "bg-[#D65F08]/10 dark:bg-orange-500/20 group-hover:bg-[#D65F08] dark:group-hover:bg-orange-500"}`}></div>
+                    <div className={`absolute top-0 left-0 w-2 h-full transition-colors ${estaExpirado ? "bg-red-400 dark:bg-red-700" : "bg-[#0F766E]/10 dark:bg-teal-500/20 group-hover:bg-[#0F766E] dark:group-hover:bg-teal-500"}`}></div>
                     
                     <button 
                       onClick={() => solicitarAutorizacion(() => eliminarPublicacion(item, pestañaActiva === "promos" ? "promociones" : "empleos"))} 
@@ -1008,8 +991,8 @@ export default function PortalNegocios() {
                       <span className={`${estaExpirado ? "bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400" : "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"} text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest border ${estaExpirado ? "border-red-100 dark:border-red-800" : "border-emerald-100 dark:border-emerald-800"}`}>
                         {estaExpirado ? "Expirado" : "Activo"}
                       </span>
-                      {item.usoUnico && <span className="bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest border border-orange-100 dark:border-orange-800">1 Solo Uso</span>}
-                      {item.tipo === "Cumpleaños" && <span className="bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest border border-orange-100 dark:border-orange-800">Cumpleañero 🎂</span>}
+                      {item.usoUnico && <span className="bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest border border-teal-100 dark:border-teal-800">1 Solo Uso</span>}
+                      {item.tipo === "Cumpleaños" && <span className="bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest border border-teal-100 dark:border-teal-800">Cumpleañero 🎂</span>}
                       {item.nivelRequerido && item.nivelRequerido !== "Clásica" && <span className={`text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest ${item.nivelRequerido === 'Black' ? 'bg-slate-900 text-fuchsia-400 border border-slate-800' : 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-700'}`}>Solo {item.nivelRequerido}</span>}
                     </div>
                     
@@ -1029,7 +1012,7 @@ export default function PortalNegocios() {
                     <p className="text-sm font-medium text-slate-500 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-700/50 p-4 rounded-[1.5rem] border border-slate-100 dark:border-slate-600">{item.descripcion}</p>
                     
                     {item.sueldo && <p className="text-xl font-black text-emerald-500 dark:text-emerald-400 mt-4">{item.sueldo}</p>}
-                    {item.tipo === "Frecuente" && <p className="text-[10px] font-black bg-orange-50 dark:bg-orange-900/30 text-[#D65F08] dark:text-orange-400 inline-block px-3 py-1.5 rounded-lg mt-4 uppercase tracking-widest border border-orange-100 dark:border-orange-900">Meta: {item.visitasMeta} Visitas</p>}
+                    {item.tipo === "Frecuente" && <p className="text-[10px] font-black bg-teal-50 dark:bg-teal-900/30 text-[#0F766E] dark:text-teal-400 inline-block px-3 py-1.5 rounded-lg mt-4 uppercase tracking-widest border border-teal-100 dark:border-teal-900">Meta: {item.visitasMeta} Visitas</p>}
                   </div>
                 )
               })
@@ -1043,7 +1026,7 @@ export default function PortalNegocios() {
         <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex justify-center items-end md:items-center animate-fade-in" onClick={cerrarModalAvisos}>
           <div className="p-6 md:p-8 rounded-t-[2.5rem] md:rounded-[2.5rem] shadow-2xl relative w-full max-w-md h-[80vh] md:h-auto flex flex-col bg-[#F3F5F9] dark:bg-slate-900 animate-slide-up" onClick={e => e.stopPropagation()}>
             <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-6 md:hidden"></div>
-            <button onClick={cerrarModalAvisos} className="absolute top-6 right-6 w-8 h-8 rounded-full flex items-center justify-center transition-colors bg-white dark:bg-slate-800 shadow-sm text-slate-400 dark:text-slate-300 hover:text-[#D65F08] dark:hover:text-orange-400 border border-slate-100 dark:border-slate-700">✕</button>
+            <button onClick={cerrarModalAvisos} className="absolute top-6 right-6 w-8 h-8 rounded-full flex items-center justify-center transition-colors bg-white dark:bg-slate-800 shadow-sm text-slate-400 dark:text-slate-300 hover:text-[#0F766E] dark:hover:text-teal-400 border border-slate-100 dark:border-slate-700">✕</button>
             
             <h3 className="text-2xl font-black mb-1 flex items-center gap-2 text-slate-900 dark:text-white tracking-tight">🔔 Bandeja</h3>
             <p className="text-[11px] font-black uppercase tracking-widest mb-6 text-slate-400 dark:text-slate-500">Comunicados IMJU</p>
@@ -1056,7 +1039,7 @@ export default function PortalNegocios() {
                     const vistos = JSON.parse(localStorage.getItem("avisosVistosNegocio") || "[]");
                     const esNuevo = !vistos.includes(a.idFirebase);
                     return (
-                      <div key={a.idFirebase} className={`p-6 rounded-[2rem] border-l-4 transition-all bg-white dark:bg-slate-800 shadow-sm ${esNuevo ? "border-l-[#D65F08] dark:border-l-orange-500" : "border-l-slate-200 dark:border-l-slate-700"}`}>
+                      <div key={a.idFirebase} className={`p-6 rounded-[2rem] border-l-4 transition-all bg-white dark:bg-slate-800 shadow-sm ${esNuevo ? "border-l-[#0F766E] dark:border-l-teal-500" : "border-l-slate-200 dark:border-l-slate-700"}`}>
                          <div className="flex justify-between items-start mb-2">
                            <h4 className="font-black text-lg leading-tight pr-4 text-slate-800 dark:text-slate-100">{a.titulo}</h4>
                            {esNuevo && <span className="w-2.5 h-2.5 bg-red-500 rounded-full mt-1.5 flex-shrink-0 animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.6)]"></span>}
@@ -1086,17 +1069,17 @@ export default function PortalNegocios() {
             <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-2 tracking-tight">Ajustes</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mb-6">Administra tus datos y credenciales.</p>
             
-            <button onClick={() => solicitarAutorizacion(abrirEditarPerfil)} className="w-full bg-[#D65F08] dark:bg-orange-900/50 text-white dark:text-orange-300 font-black py-4.5 rounded-2xl text-[11px] uppercase tracking-widest shadow-lg mb-6 flex items-center justify-center gap-2 hover:bg-slate-900 dark:hover:bg-orange-900 transition-colors border border-transparent dark:border-orange-800 active:scale-95">
+            <button onClick={() => solicitarAutorizacion(abrirEditarPerfil)} className="w-full bg-[#0F766E] dark:bg-teal-900/50 text-white dark:text-teal-300 font-black py-4.5 rounded-2xl text-[11px] uppercase tracking-widest shadow-lg mb-6 flex items-center justify-center gap-2 hover:bg-slate-900 dark:hover:bg-teal-900 transition-colors border border-transparent dark:border-teal-800 active:scale-95">
                ✏️ Perfil Público (Directorio)
             </button>
 
             <form onSubmit={actualizarContrasena} className="space-y-4 pt-4 border-t border-slate-200/50 dark:border-slate-700 mb-6">
               <div>
                 <label className="block text-[10px] font-black uppercase tracking-widest mb-2 text-slate-500 dark:text-slate-400">Cambiar Contraseña</label>
-                <input type="password" value={contrasenaActualInput} onChange={(e) => setContrasenaActualInput(e.target.value)} placeholder="Contraseña Actual" className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:border-[#D65F08] dark:focus:border-orange-400 focus:ring-4 focus:ring-[#D65F08]/10 mb-3 transition-all" required />
-                <input type="password" value={nuevaContrasena} onChange={(e) => setNuevaContrasena(e.target.value)} placeholder="Nueva Contraseña (Mínimo 6)" className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:border-[#D65F08] dark:focus:border-orange-400 focus:ring-4 focus:ring-[#D65F08]/10 transition-all" required minLength={6} />
+                <input type="password" value={contrasenaActualInput} onChange={(e) => setContrasenaActualInput(e.target.value)} placeholder="Contraseña Actual" className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:border-[#0F766E] dark:focus:border-teal-400 focus:ring-4 focus:ring-[#0F766E]/10 mb-3 transition-all" required />
+                <input type="password" value={nuevaContrasena} onChange={(e) => setNuevaContrasena(e.target.value)} placeholder="Nueva Contraseña (Mínimo 6)" className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:border-[#0F766E] dark:focus:border-teal-400 focus:ring-4 focus:ring-[#0F766E]/10 transition-all" required minLength={6} />
               </div>
-              <button type="submit" disabled={cambiandoPass} className={`w-full font-black py-4.5 rounded-2xl text-[11px] uppercase tracking-widest shadow-lg transition-all ${cambiandoPass ? "bg-slate-400 dark:bg-slate-600 text-white" : "bg-slate-900 dark:bg-slate-700 hover:bg-[#D65F08] dark:hover:bg-slate-600 text-white active:scale-95"}`}>
+              <button type="submit" disabled={cambiandoPass} className={`w-full font-black py-4.5 rounded-2xl text-[11px] uppercase tracking-widest shadow-lg transition-all ${cambiandoPass ? "bg-slate-400 dark:bg-slate-600 text-white" : "bg-slate-900 dark:bg-slate-700 hover:bg-[#0F766E] dark:hover:bg-slate-600 text-white active:scale-95"}`}>
                 {cambiandoPass ? "Guardando..." : "Actualizar Contraseña"}
               </button>
             </form>
@@ -1129,22 +1112,22 @@ export default function PortalNegocios() {
 
                <div>
                  <label className="block text-[10px] font-black uppercase tracking-widest mb-2 text-slate-500 dark:text-slate-400 pl-2">Nombre Comercial</label>
-                 <input type="text" value={editNombre} onChange={(e) => setEditNombre(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#D65F08]/10 transition-all" required />
+                 <input type="text" value={editNombre} onChange={(e) => setEditNombre(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#0F766E]/10 transition-all" required />
                </div>
                
                <div>
                  <label className="block text-[10px] font-black uppercase tracking-widest mb-2 text-slate-500 dark:text-slate-400 pl-2">Giro (¿A qué te dedicas?)</label>
-                 <input type="text" value={editGiro} onChange={(e) => setEditGiro(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#D65F08]/10 transition-all" placeholder="Ej. Comida, Ropa, Barbería..." required />
+                 <input type="text" value={editGiro} onChange={(e) => setEditGiro(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#0F766E]/10 transition-all" placeholder="Ej. Comida, Ropa, Barbería..." required />
                </div>
 
                <div className="grid grid-cols-2 gap-3">
                  <div className="col-span-2 md:col-span-1">
                    <label className="block text-[10px] font-black uppercase tracking-widest mb-2 text-slate-500 dark:text-slate-400 pl-2">Horario de Atención</label>
-                   <input type="text" value={editHorario} onChange={(e) => setEditHorario(e.target.value)} placeholder="Ej. Lun-Sáb 9am a 6pm" className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#D65F08]/10 transition-all" required />
+                   <input type="text" value={editHorario} onChange={(e) => setEditHorario(e.target.value)} placeholder="Ej. Lun-Sáb 9am a 6pm" className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#0F766E]/10 transition-all" required />
                  </div>
                  <div className="col-span-2 md:col-span-1">
                    <label className="block text-[10px] font-black uppercase tracking-widest mb-2 text-slate-500 dark:text-slate-400 pl-2">WhatsApp de Contacto</label>
-                   <input type="number" value={editTelefono} onChange={(e) => setEditTelefono(e.target.value)} placeholder="10 dígitos" className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#D65F08]/10 transition-all" required />
+                   <input type="number" value={editTelefono} onChange={(e) => setEditTelefono(e.target.value)} placeholder="10 dígitos" className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#0F766E]/10 transition-all" required />
                  </div>
                </div>
 
@@ -1159,7 +1142,7 @@ export default function PortalNegocios() {
                  <p className="text-[9px] text-slate-500 dark:text-slate-400 mt-2 text-center font-bold">Mantén presionado el pin azul y arrástralo a tu ubicación exacta.</p>
                </div>
                
-               <button type="submit" disabled={guardandoPerfil} className={`w-full mt-6 font-black py-5 rounded-[2rem] text-[11px] uppercase tracking-widest shadow-xl transition-all active:scale-95 ${guardandoPerfil ? "bg-slate-400 text-white" : "bg-[#D65F08] dark:bg-orange-700 hover:bg-slate-900 dark:hover:bg-orange-600 text-white shadow-[#D65F08]/20"}`}>
+               <button type="submit" disabled={guardandoPerfil} className={`w-full mt-6 font-black py-5 rounded-[2rem] text-[11px] uppercase tracking-widest shadow-xl transition-all active:scale-95 ${guardandoPerfil ? "bg-slate-400 text-white" : "bg-[#0F766E] dark:bg-teal-700 hover:bg-slate-900 dark:hover:bg-teal-600 text-white shadow-[#0F766E]/20"}`}>
                  {guardandoPerfil ? "Guardando..." : "✅ Actualizar en Directorio"}
                </button>
             </form>
@@ -1179,13 +1162,13 @@ export default function PortalNegocios() {
              <form onSubmit={creandoModal === "promo" ? publicarPromo : publicarEmpleo} className="space-y-5">
                 {creandoModal === "promo" && (
                   <>
-                    <select value={tipoPromo} onChange={(e) => setTipoPromo(e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#D65F08]/10 transition-all shadow-sm" required>
+                    <select value={tipoPromo} onChange={(e) => setTipoPromo(e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#0F766E]/10 transition-all shadow-sm" required>
                       <option value="">Selecciona el tipo...</option><option value="Directa">🏷️ Descuento Directo</option><option value="Frecuente">⭐ Lealtad (Visitas)</option><option value="Cumpleaños">🎂 Especial Cumpleañero</option>
                     </select>
 
-                    <div className="bg-amber-50 dark:bg-amber-900/20 p-5 rounded-[2rem] border border-amber-100 dark:border-amber-800/50">
-                      <label className="block text-[10px] font-black uppercase tracking-widest mb-3 text-amber-800 dark:text-amber-400">¿Para qué Nivel de Tarjeta es?</label>
-                      <select value={nivelRequerido} onChange={(e) => setNivelRequerido(e.target.value)} className="w-full bg-white dark:bg-slate-800 border-transparent rounded-xl px-4 py-3.5 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-amber-500/20 transition-all shadow-sm" required>
+                    <div className="bg-stone-50 dark:bg-stone-900/20 p-5 rounded-[2rem] border border-stone-100 dark:border-stone-800/50">
+                      <label className="block text-[10px] font-black uppercase tracking-widest mb-3 text-stone-800 dark:text-stone-400">¿Para qué Nivel de Tarjeta es?</label>
+                      <select value={nivelRequerido} onChange={(e) => setNivelRequerido(e.target.value)} className="w-full bg-white dark:bg-slate-800 border-transparent rounded-xl px-4 py-3.5 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-stone-500/20 transition-all shadow-sm" required>
                         <option value="Clásica">🔹 Nivel Clásico (Todos)</option>
                         <option value="Oro">⭐ Nivel Oro (Clientes frecuentes)</option>
                         <option value="Black">👑 VIP Black (Solo élite)</option>
@@ -1195,20 +1178,20 @@ export default function PortalNegocios() {
                 )}
                 
                 {tipoPromo === "Directa" && (
-                  <label className="flex items-center gap-4 bg-orange-50 dark:bg-orange-900/20 p-5 rounded-[2rem] border border-orange-100 dark:border-orange-800/50 cursor-pointer">
-                    <input type="checkbox" checked={usoUnico} onChange={(e) => setUsoUnico(e.target.checked)} className="w-6 h-6 accent-orange-600 rounded-md" />
+                  <label className="flex items-center gap-4 bg-teal-50 dark:bg-teal-900/20 p-5 rounded-[2rem] border border-teal-100 dark:border-teal-800/50 cursor-pointer">
+                    <input type="checkbox" checked={usoUnico} onChange={(e) => setUsoUnico(e.target.checked)} className="w-6 h-6 accent-teal-600 rounded-md" />
                     <div>
-                      <p className="text-sm font-black text-orange-800 dark:text-orange-400 leading-tight">Válido solo 1 vez por joven</p>
-                      <p className="text-[10px] text-orange-600 dark:text-orange-500 font-bold mt-1">El cupón se bloqueará tras usarlo.</p>
+                      <p className="text-sm font-black text-teal-800 dark:text-teal-400 leading-tight">Válido solo 1 vez por joven</p>
+                      <p className="text-[10px] text-teal-600 dark:text-teal-500 font-bold mt-1">El cupón se bloqueará tras usarlo.</p>
                     </div>
                   </label>
                 )}
 
-                {tipoPromo === "Frecuente" && <input type="number" value={visitasRequeridas} onChange={(e) => setVisitasRequeridas(e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#D65F08]/10 transition-all shadow-sm" placeholder="Meta de visitas (Ej. 5)" required />}
+                {tipoPromo === "Frecuente" && <input type="number" value={visitasRequeridas} onChange={(e) => setVisitasRequeridas(e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#0F766E]/10 transition-all shadow-sm" placeholder="Meta de visitas (Ej. 5)" required />}
                 
-                <input type="text" value={titulo} onChange={(e) => setTitulo(e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#D65F08]/10 transition-all shadow-sm" placeholder="Título principal" required />
-                <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#D65F08]/10 transition-all h-32 resize-none shadow-sm" placeholder="Descripción detallada..." required></textarea>
-                <input type="text" value={direccion} onChange={(e) => setDireccion(e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#D65F08]/10 transition-all shadow-sm" placeholder="📍 Dirección o Sucursal donde aplica" required />
+                <input type="text" value={titulo} onChange={(e) => setTitulo(e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#0F766E]/10 transition-all shadow-sm" placeholder="Título principal" required />
+                <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#0F766E]/10 transition-all h-32 resize-none shadow-sm" placeholder="Descripción detallada..." required></textarea>
+                <input type="text" value={direccion} onChange={(e) => setDireccion(e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#0F766E]/10 transition-all shadow-sm" placeholder="📍 Dirección o Sucursal donde aplica" required />
                 
                 {creandoModal === "empleo" && (
                   <div className="space-y-5">
@@ -1239,7 +1222,7 @@ export default function PortalNegocios() {
                    <div className="bg-white dark:bg-slate-800 border-2 border-dashed border-slate-200 dark:border-slate-600 rounded-[2rem] p-5 text-center mt-2 shadow-sm">
                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-3">Foto del Cupón (Opcional)</p>
                      {!imgPromoPreview ? (
-                        <label className="bg-orange-50 dark:bg-orange-900/20 text-[#D65F08] dark:text-orange-400 border border-orange-200 dark:border-orange-800 font-bold py-3 px-6 rounded-xl cursor-pointer text-[10px] uppercase tracking-widest hover:bg-orange-100 dark:hover:bg-orange-900/50 transition-colors inline-block">
+                        <label className="bg-teal-50 dark:bg-teal-900/20 text-[#0F766E] dark:text-teal-400 border border-teal-200 dark:border-teal-800 font-bold py-3 px-6 rounded-xl cursor-pointer text-[10px] uppercase tracking-widest hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors inline-block">
                            📁 Subir Foto <input type="file" accept="image/*" onChange={(e) => manejarSubidaArchivo(e, "promo")} className="hidden" />
                         </label>
                      ) : (
@@ -1252,7 +1235,7 @@ export default function PortalNegocios() {
                 )}
 
                 <div className="pt-6 border-t border-slate-200 dark:border-slate-700 mt-2">
-                  <button type="submit" disabled={publicandoPromo} className={`w-full text-white font-black py-5 rounded-[2rem] text-[11px] uppercase tracking-widest shadow-xl transition-all active:scale-95 ${publicandoPromo ? "bg-slate-400 dark:bg-slate-600" : "bg-[#D65F08] hover:bg-slate-900 dark:bg-orange-700 dark:hover:bg-orange-600 shadow-[#D65F08]/20"}`}>
+                  <button type="submit" disabled={publicandoPromo} className={`w-full text-white font-black py-5 rounded-[2rem] text-[11px] uppercase tracking-widest shadow-xl transition-all active:scale-95 ${publicandoPromo ? "bg-slate-400 dark:bg-slate-600" : "bg-[#0F766E] hover:bg-slate-900 dark:bg-teal-700 dark:hover:bg-teal-600 shadow-[#0F766E]/20"}`}>
                      {publicandoPromo ? "Publicando..." : "✅ Publicar en la App"}
                   </button>
                 </div>
@@ -1278,7 +1261,7 @@ export default function PortalNegocios() {
               <button 
                 key={btn.id}
                 onClick={() => setPestañaActiva(btn.id)} 
-                className={`flex flex-col items-center gap-1.5 transition-all duration-300 w-16 py-2 rounded-2xl ${activo ? "text-[#D65F08] dark:text-orange-400 bg-orange-50 dark:bg-orange-900/30 shadow-sm" : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"}`}
+                className={`flex flex-col items-center gap-1.5 transition-all duration-300 w-16 py-2 rounded-2xl ${activo ? "text-[#0F766E] dark:text-teal-400 bg-teal-50 dark:bg-teal-900/30 shadow-sm" : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"}`}
               >
                 <span className={`text-2xl transition-transform ${activo ? "scale-110" : "scale-100"}`}>{btn.icon}</span>
                 <span className={`text-[8px] font-black uppercase tracking-tighter w-full text-center transition-all ${activo ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 h-0"}`}>{btn.label}</span>

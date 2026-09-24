@@ -47,7 +47,10 @@ service cloud.firestore {
     }
 
     match /tarjetas/{uid} {
-      allow read: if administrador() || negocioActivo() || (autenticado() && request.auth.uid == uid);
+      // El QR se valida en una ruta segura del servidor. Un negocio nunca debe
+      // poder listar todas las tarjetas ni leer datos de jóvenes directamente.
+      allow get: if administrador() || (autenticado() && request.auth.uid == uid);
+      allow list: if administrador();
       allow write: if administrador();
     }
 
@@ -55,8 +58,9 @@ service cloud.firestore {
       allow read: if administrador()
         || (negocioActivo() && resource.data.ownerUid == request.auth.uid)
         || (autenticado() && resource.data.youthUid == request.auth.uid);
-      allow create: if negocioActivo() && request.resource.data.ownerUid == request.auth.uid;
-      allow delete: if administrador() || (negocioActivo() && resource.data.ownerUid == request.auth.uid);
+      // Altas y anulaciones pasan por /api/negocio/tarjeta, donde se valida
+      // el QR, la promoción y la identidad del negocio con Firebase Admin.
+      allow create, delete: if administrador();
       allow update: if administrador();
     }
 

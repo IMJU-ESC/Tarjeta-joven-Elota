@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { useRouter } from "next/navigation";
-import { doc, collection, getDocs, query, where, getDoc } from "firebase/firestore"; 
+import { doc, collection, getDocs, limit, query, where, getDoc } from "firebase/firestore"; 
 import { EmailAuthProvider, onAuthStateChanged, reauthenticateWithCredential, signOut, updatePassword } from "firebase/auth";
 import { auth, db } from "../../firebase";
 
@@ -14,6 +14,9 @@ const MapContainer = dynamic(() => import("react-leaflet").then((mod) => mod.Map
 const TileLayer = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), { ssr: false });
 const Marker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), { ssr: false });
 const Popup = dynamic(() => import("react-leaflet").then((mod) => mod.Popup), { ssr: false });
+
+const INSTAGRAM_URL = "https://www.instagram.com/imjuelotamx?stkn=M24xYzdweDVzMDI3";
+const FACEBOOK_URL = "https://www.facebook.com/profile.php?id=100075974077385";
 
 export default function TarjetaDigital() {
   const [datosJoven, setDatosJoven] = useState<any>(null);
@@ -113,14 +116,14 @@ export default function TarjetaDigital() {
 
       if (ultimaActDB > cacheVersionLocal || cacheVersionLocal === 0) {
         
-        const snapPromos = await getDocs(query(collection(db, "promociones"), where("estatus", "==", "Activa")));
+        const snapPromos = await getDocs(query(collection(db, "promociones"), where("estatus", "==", "Activa"), limit(200)));
         snapPromos.forEach((d) => pTemp.push({ idFirebase: d.id, ...d.data() }));
 
-        const snapEmpleos = await getDocs(query(collection(db, "empleos"), where("estatus", "==", "Activa")));
+        const snapEmpleos = await getDocs(query(collection(db, "empleos"), where("estatus", "==", "Activa"), limit(200)));
         snapEmpleos.forEach((d) => eTemp.push({ idFirebase: d.id, ...d.data() }));
 
         // CORRECCIÓN DIRECTORIO: Carga todos los negocios excepto los "Pendiente"
-        const snapNegocios = await getDocs(query(collection(db, "negocios"), where("estatus", "==", "Activo")));
+        const snapNegocios = await getDocs(query(collection(db, "negocios"), where("estatus", "==", "Activo"), limit(250)));
         snapNegocios.forEach((d) => nTemp.push({ idFirebase: d.id, ...d.data() }));
 
         localStorage.setItem("cache_promos", JSON.stringify(pTemp));
@@ -138,7 +141,7 @@ export default function TarjetaDigital() {
       setListaEmpleos(eTemp);
       setListaNegocios(nTemp);
 
-      const qHistorial = query(collection(db, "visitas"), where("youthUid", "==", idJoven));
+      const qHistorial = query(collection(db, "visitas"), where("youthUid", "==", idJoven), limit(200));
       const snapHistorial = await getDocs(qHistorial);
       const hTemp: any[] = [];
       snapHistorial.forEach((d) => hTemp.push({ idFirebase: d.id, ...d.data() }));
@@ -153,7 +156,7 @@ export default function TarjetaDigital() {
         });
       }
 
-      const snapAvisos = await getDocs(query(collection(db, "anuncios")));
+      const snapAvisos = await getDocs(query(collection(db, "anuncios"), limit(50)));
       const aTemp: any[] = [];
       snapAvisos.forEach((d) => {
         const data = d.data();
@@ -325,7 +328,7 @@ export default function TarjetaDigital() {
          <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] z-0"></div>
          <div className="relative z-10 bg-slate-800/80 backdrop-blur-md p-8 rounded-[3rem] shadow-2xl border border-white/10 max-w-sm">
             <div className="text-6xl mb-6">🎓</div>
-            <h1 className="text-2xl font-black text-orange-400 mb-4 uppercase tracking-widest">¡Gracias por participar!</h1>
+            <h1 className="text-2xl font-black text-teal-400 mb-4 uppercase tracking-widest">¡Gracias por participar!</h1>
             <p className="text-sm font-medium text-slate-300 mb-6 leading-relaxed">
               El reglamento del Instituto Municipal de la Juventud establece que los beneficios de la Tarjeta Joven son aplicables hasta los 29 años. 
               <br/><br/>
@@ -420,20 +423,20 @@ export default function TarjetaDigital() {
   const themeColors = esBlack 
     ? { bg: "bg-[#050505]", border: "border-white/10", glow1: "bg-violet-600 animate-pulse", glow2: "bg-fuchsia-600 animate-pulse", text: "from-violet-400 to-fuchsia-400", badge: "VIP BLACK" }
     : esOro 
-    ? { bg: "bg-gradient-to-br from-yellow-900 to-[#1a1300]", border: "border-yellow-500/30", glow1: "bg-yellow-500 animate-pulse", glow2: "bg-orange-500 animate-pulse", text: "from-yellow-300 to-yellow-600", badge: "NIVEL ORO" }
+    ? { bg: "bg-gradient-to-br from-yellow-900 to-[#1a1300]", border: "border-yellow-500/30", glow1: "bg-yellow-500 animate-pulse", glow2: "bg-teal-500 animate-pulse", text: "from-yellow-300 to-yellow-600", badge: "NIVEL ORO" }
     : { bg: "bg-gradient-to-br from-slate-900 to-[#0a1128]", border: "border-blue-500/30", glow1: "bg-blue-500 animate-pulse", glow2: "bg-cyan-500 animate-pulse", text: "from-blue-300 to-cyan-300", badge: "CLÁSICA" };
 
   return (
-    <main className={`app-shell motion-enter min-h-screen pb-24 font-sans selection:bg-violet-500/30 transition-colors duration-500 overflow-x-hidden ${modoOscuro ? "bg-[#080A12] text-white" : "bg-[#FFF8F3] text-slate-900"}`}>
+    <main className={`app-shell motion-enter min-h-screen pb-24 font-sans selection:bg-violet-500/30 transition-colors duration-500 overflow-x-hidden ${modoOscuro ? "bg-[#080A12] text-white" : "bg-[#F6F7F9] text-slate-900"}`}>
       {modalRutaCompletada && (
         <div className="fixed inset-0 z-[400] grid place-items-center overflow-hidden bg-slate-950/85 p-5 backdrop-blur-md" onClick={() => setModalRutaCompletada(false)}>
-          {["#f58220", "#f4c425", "#24b5d6", "#f70476", "#34d399", "#a78bfa"].map((color, index) => (
+          {["#64748B", "#f4c425", "#24b5d6", "#f70476", "#34d399", "#a78bfa"].map((color, index) => (
             <span key={color} className="celebration-spark top-0" style={{ left: `${14 + index * 14}%`, background: color, animationDelay: `${index * .18}s`, ["--spark-x" as string]: `${index % 2 ? 35 : -30}px` }}></span>
           ))}
           <section className="motion-enter relative w-full max-w-sm overflow-hidden rounded-[2.7rem] border border-white/10 bg-gradient-to-br from-[#171d31] to-[#080d18] p-7 text-center text-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
-            <div className="brand-orb absolute -right-16 -top-16 h-48 w-48 rounded-full bg-orange-400/20 blur-3xl"></div>
-            <div className="relative mx-auto grid h-28 w-28 place-items-center rounded-[2.3rem] bg-gradient-to-br from-orange-400 via-pink-500 to-violet-600 text-6xl shadow-xl shadow-pink-950/40">🏅</div>
-            <p className="relative mt-6 text-[9px] font-black uppercase tracking-[.3em] text-orange-300">Ruta inicial completada</p>
+            <div className="brand-orb absolute -right-16 -top-16 h-48 w-48 rounded-full bg-teal-400/20 blur-3xl"></div>
+            <div className="relative mx-auto grid h-28 w-28 place-items-center rounded-[2.3rem] bg-gradient-to-br from-teal-400 via-pink-500 to-violet-600 text-6xl shadow-xl shadow-pink-950/40">🏅</div>
+            <p className="relative mt-6 text-[9px] font-black uppercase tracking-[.3em] text-teal-300">Ruta inicial completada</p>
             <h2 className="relative mt-2 text-3xl font-black tracking-tight">¡Explorador de Elota!</h2>
             <p className="relative mt-3 text-sm font-medium leading-6 text-slate-300">Desbloqueaste tu primera insignia y <strong className="text-white">120 XP</strong>. Ahora comienzan retos que se cumplen con visitas reales.</p>
             <div className="relative mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-left">
@@ -455,13 +458,13 @@ export default function TarjetaDigital() {
       {modalMisiones && (
         <div className="fixed inset-0 z-[350] flex items-end justify-center bg-slate-950/70 p-0 backdrop-blur-sm sm:items-center sm:p-5" onClick={() => setModalMisiones(false)}>
           <section className={`motion-enter max-h-[88vh] w-full max-w-2xl overflow-y-auto rounded-t-[2.3rem] border p-5 shadow-2xl sm:rounded-[2.3rem] sm:p-7 ${modoOscuro ? "border-white/10 bg-[#111625] text-white" : "border-slate-100 bg-white text-slate-900"}`} onClick={(event) => event.stopPropagation()}>
-            <div className="flex items-start justify-between gap-4"><div><p className="text-[9px] font-black uppercase tracking-[.24em] text-orange-500">Ruta joven</p><h2 className="mt-1 text-2xl font-black">Misiones y recompensas</h2><p className="mt-1 text-xs font-medium text-slate-400">Avanza a tu ritmo. Puedes cerrar esta sección cuando quieras.</p></div><button onClick={() => setModalMisiones(false)} className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${modoOscuro ? "bg-white/10" : "bg-slate-100"}`} aria-label="Cerrar misiones">✕</button></div>
-            <div className="mt-5 flex items-center gap-4 rounded-2xl bg-gradient-to-r from-orange-500 to-pink-500 p-4 text-white"><div className="min-w-0 flex-1"><p className="text-[9px] font-black uppercase tracking-widest text-orange-100">Progreso total</p><div className="mt-2 h-2 overflow-hidden rounded-full bg-white/20"><div className="h-full rounded-full bg-white transition-all duration-700" style={{ width: `${(totalMisiones / misiones.length) * 100}%` }}></div></div></div><div className="text-right"><strong className="block text-xl">{xpJoven} XP</strong><span className="text-[9px] font-bold">{totalMisiones}/5 listas</span></div></div>
+            <div className="flex items-start justify-between gap-4"><div><p className="text-[9px] font-black uppercase tracking-[.24em] text-teal-500">Ruta joven</p><h2 className="mt-1 text-2xl font-black">Misiones y recompensas</h2><p className="mt-1 text-xs font-medium text-slate-400">Avanza a tu ritmo. Puedes cerrar esta sección cuando quieras.</p></div><button onClick={() => setModalMisiones(false)} className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${modoOscuro ? "bg-white/10" : "bg-slate-100"}`} aria-label="Cerrar misiones">✕</button></div>
+            <div className="mt-5 flex items-center gap-4 rounded-2xl bg-gradient-to-r from-teal-500 to-pink-500 p-4 text-white"><div className="min-w-0 flex-1"><p className="text-[9px] font-black uppercase tracking-widest text-teal-100">Progreso total</p><div className="mt-2 h-2 overflow-hidden rounded-full bg-white/20"><div className="h-full rounded-full bg-white transition-all duration-700" style={{ width: `${(totalMisiones / misiones.length) * 100}%` }}></div></div></div><div className="text-right"><strong className="block text-xl">{xpJoven} XP</strong><span className="text-[9px] font-bold">{totalMisiones}/5 listas</span></div></div>
             {rutaCompleta && <div className={`mt-4 rounded-2xl border p-4 ${modoOscuro ? "border-violet-400/20 bg-violet-400/10" : "border-violet-100 bg-violet-50"}`}><div className="flex items-center justify-between gap-4"><div><p className="text-[9px] font-black uppercase tracking-[.18em] text-violet-500">🏅 Explorador de Elota</p><p className="mt-1 text-xs font-medium text-slate-400">Reto semanal: registra tres visitas.</p></div><strong className="text-lg text-violet-500">{Math.min(visitasSemana, 3)}/3</strong></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-violet-200/40 dark:bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-400" style={{ width: `${progresoSemanal}%` }}></div></div></div>}
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               {misiones.map((mission) => {
                 const complete = misionesCompletadas.includes(mission.id);
-                return <button key={mission.id} onClick={() => { setModalMisiones(false); setTimeout(() => mission.id === "primera-visita" && miHistorial.length === 0 ? mission.action() : ejecutarMision(mission.id, mission.action, mission.reward), 160); }} className={`rounded-2xl border p-4 text-left transition active:scale-[.98] ${complete ? "border-emerald-200 bg-emerald-50 dark:border-emerald-700/40 dark:bg-emerald-900/20" : modoOscuro ? "border-white/10 bg-white/5" : "border-slate-100 bg-slate-50"}`}><div className="flex items-center justify-between"><span className="text-2xl">{complete ? "✅" : mission.icon}</span><span className={`rounded-full px-2 py-1 text-[8px] font-black ${complete ? "bg-emerald-500 text-white" : "bg-orange-100 text-orange-700"}`}>{complete ? "LISTA" : mission.reward}</span></div><h3 className="mt-3 text-sm font-black">{mission.title}</h3><p className="mt-1 text-[10px] font-medium text-slate-400">{mission.description}</p></button>;
+                return <button key={mission.id} onClick={() => { setModalMisiones(false); setTimeout(() => mission.id === "primera-visita" && miHistorial.length === 0 ? mission.action() : ejecutarMision(mission.id, mission.action, mission.reward), 160); }} className={`rounded-2xl border p-4 text-left transition active:scale-[.98] ${complete ? "border-emerald-200 bg-emerald-50 dark:border-emerald-700/40 dark:bg-emerald-900/20" : modoOscuro ? "border-white/10 bg-white/5" : "border-slate-100 bg-slate-50"}`}><div className="flex items-center justify-between"><span className="text-2xl">{complete ? "✅" : mission.icon}</span><span className={`rounded-full px-2 py-1 text-[8px] font-black ${complete ? "bg-emerald-500 text-white" : "bg-teal-100 text-teal-700"}`}>{complete ? "LISTA" : mission.reward}</span></div><h3 className="mt-3 text-sm font-black">{mission.title}</h3><p className="mt-1 text-[10px] font-medium text-slate-400">{mission.description}</p></button>;
               })}
             </div>
           </section>
@@ -476,13 +479,13 @@ export default function TarjetaDigital() {
              <img src="/imju-elota.webp" alt="IMJU Elota" />
           </div>
           <div className="min-w-0">
-            <p className="mb-1 bg-gradient-to-r from-orange-500 via-pink-500 to-cyan-500 bg-clip-text text-[9px] font-black uppercase tracking-[.22em] text-transparent">Experiencia joven · Elota</p>
+            <p className="mb-1 bg-gradient-to-r from-teal-500 via-pink-500 to-cyan-500 bg-clip-text text-[9px] font-black uppercase tracking-[.22em] text-transparent">Experiencia joven · Elota</p>
             <h1 className={`max-w-[145px] truncate text-xl font-black tracking-tighter ${modoOscuro ? "text-white" : "text-slate-900"}`}>¡Qué onda, {datosJoven.nombreCompleto.split(" ")[0]}!</h1>
           </div>
         </div>
         
         <div className="flex gap-2">
-          <button onClick={() => setModalAvisos(true)} className={`relative w-11 h-11 rounded-full flex items-center justify-center text-lg transition-all ${modoOscuro ? "bg-[#161B2C] text-slate-300 hover:text-white" : "bg-white shadow-md border border-slate-100 text-slate-400 hover:text-[#D65F08]"}`}>
+          <button onClick={() => setModalAvisos(true)} className={`relative w-11 h-11 rounded-full flex items-center justify-center text-lg transition-all ${modoOscuro ? "bg-[#161B2C] text-slate-300 hover:text-white" : "bg-white shadow-md border border-slate-100 text-slate-400 hover:text-[#0F766E]"}`}>
              🔔
              {avisosNoLeidos > 0 && <span className="absolute top-2 right-2 w-3 h-3 bg-red-500 border-2 border-white rounded-full animate-pulse"></span>}
           </button>
@@ -555,10 +558,19 @@ export default function TarjetaDigital() {
       {/* Acceso compacto: los detalles viven en una hoja opcional. */}
       <section className="mx-auto mt-4 w-full max-w-md px-6">
         <button onClick={() => setModalMisiones(true)} className={`brand-mini-card interactive-card flex w-full items-center gap-4 rounded-2xl p-3.5 text-left ${modoOscuro ? "brand-mini-dark" : ""}`}>
-          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-orange-500 to-pink-500 text-xl text-white">{rutaCompleta ? "🏅" : "✨"}</div>
-          <div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-3"><p className={`truncate text-xs font-black ${modoOscuro ? "text-white" : "text-slate-900"}`}>{rutaCompleta ? "Explorador de Elota" : "Tu ruta joven"}</p><span className="text-[9px] font-black text-orange-500">{totalMisiones}/5</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-orange-400 to-pink-500" style={{ width: `${(totalMisiones / misiones.length) * 100}%` }}></div></div></div>
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-teal-500 to-pink-500 text-xl text-white">{rutaCompleta ? "🏅" : "✨"}</div>
+          <div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-3"><p className={`truncate text-xs font-black ${modoOscuro ? "text-white" : "text-slate-900"}`}>{rutaCompleta ? "Explorador de Elota" : "Tu ruta joven"}</p><span className="text-[9px] font-black text-teal-500">{totalMisiones}/5</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-teal-400 to-pink-500" style={{ width: `${(totalMisiones / misiones.length) * 100}%` }}></div></div></div>
           <span className="shrink-0 text-slate-400">›</span>
         </button>
+      </section>
+
+      <section className="mx-auto mt-3 grid w-full max-w-md grid-cols-2 gap-3 px-6" aria-label="Redes sociales de IMJU Elota">
+        <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer" className="interactive-card flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 to-pink-600 px-4 py-3 text-[10px] font-black uppercase tracking-wider text-white shadow-lg shadow-pink-900/15" aria-label="Abrir Instagram de IMJU Elota">
+          <span aria-hidden="true" className="text-base">◎</span> Instagram
+        </a>
+        <a href={FACEBOOK_URL} target="_blank" rel="noopener noreferrer" className="interactive-card flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-600 px-4 py-3 text-[10px] font-black uppercase tracking-wider text-white shadow-lg shadow-blue-900/15" aria-label="Abrir Facebook de IMJU Elota">
+          <span aria-hidden="true" className="text-base font-black">f</span> Facebook
+        </a>
       </section>
       </div>
 
@@ -589,7 +601,7 @@ export default function TarjetaDigital() {
             placeholder="Buscar descuentos, comercios..." 
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
-            className={`w-full rounded-[2rem] px-7 py-4 text-sm font-bold outline-none transition-all focus:ring-4 shadow-sm ${modoOscuro ? "bg-[#111625] border border-white/10 text-white placeholder-slate-500 focus:ring-violet-500/20" : "bg-white border border-slate-200 text-slate-800 placeholder-slate-400 focus:ring-[#D65F08]/20"}`}
+            className={`w-full rounded-[2rem] px-7 py-4 text-sm font-bold outline-none transition-all focus:ring-4 shadow-sm ${modoOscuro ? "bg-[#111625] border border-white/10 text-white placeholder-slate-500 focus:ring-violet-500/20" : "bg-white border border-slate-200 text-slate-800 placeholder-slate-400 focus:ring-[#0F766E]/20"}`}
           />
           <span className="absolute right-5 top-4 text-slate-400 text-lg">🔍</span>
         </div>
@@ -614,7 +626,7 @@ export default function TarjetaDigital() {
             <div className="flex gap-2 pb-4 overflow-x-auto scroll-estetico mb-4 snap-x">
                 <button onClick={() => setFiltroTipoPromo("todos")} className={`snap-center shrink-0 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors border ${filtroTipoPromo === "todos" ? (modoOscuro ? "bg-white text-slate-900 border-white" : "bg-slate-900 text-white border-slate-900") : (modoOscuro ? "border-white/10 text-slate-400" : "border-slate-200 text-slate-500 bg-white")}`}>🔥 Todos</button>
                 <button onClick={() => setFiltroTipoPromo("Directa")} className={`snap-center shrink-0 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors border ${filtroTipoPromo === "Directa" ? "bg-emerald-500 text-white border-emerald-500 shadow-md" : (modoOscuro ? "border-white/10 text-slate-400" : "border-slate-200 text-slate-500 bg-white")}`}>🏷️ Descuentos</button>
-                <button onClick={() => setFiltroTipoPromo("Cumpleaños")} className={`snap-center shrink-0 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors border ${filtroTipoPromo === "Cumpleaños" ? "bg-orange-500 text-white border-orange-500 shadow-md" : (modoOscuro ? "border-white/10 text-slate-400" : "border-slate-200 text-slate-500 bg-white")}`}>🎂 Cumpleaños</button>
+                <button onClick={() => setFiltroTipoPromo("Cumpleaños")} className={`snap-center shrink-0 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors border ${filtroTipoPromo === "Cumpleaños" ? "bg-teal-500 text-white border-teal-500 shadow-md" : (modoOscuro ? "border-white/10 text-slate-400" : "border-slate-200 text-slate-500 bg-white")}`}>🎂 Cumpleaños</button>
                 <button onClick={() => setFiltroTipoPromo("Frecuente")} className={`snap-center shrink-0 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors border ${filtroTipoPromo === "Frecuente" ? "bg-fuchsia-600 text-white border-fuchsia-600 shadow-md" : (modoOscuro ? "border-white/10 text-slate-400" : "border-slate-200 text-slate-500 bg-white")}`}>⭐ Lealtad</button>
             </div>
         )}
@@ -676,14 +688,14 @@ export default function TarjetaDigital() {
                            <img src={p.logoNegocio || "/imju-elota.webp"} className="w-full h-full object-contain rounded-xl" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className={`text-[9px] font-black uppercase tracking-widest truncate ${esFrecuente ? 'text-fuchsia-500' : esCumple ? 'text-orange-500' : 'text-emerald-500'}`}>{p.nombreNegocio}</p>
+                          <p className={`text-[9px] font-black uppercase tracking-widest truncate ${esFrecuente ? 'text-fuchsia-500' : esCumple ? 'text-teal-500' : 'text-emerald-500'}`}>{p.nombreNegocio}</p>
                           <h4 className={`text-xl font-black leading-tight truncate mt-0.5 ${modoOscuro ? "text-white" : "text-slate-900"}`}>{p.titulo}</h4>
                         </div>
                       </div>
                       
                       <div className="flex flex-wrap items-center gap-2 mb-4">
-                         {esUnicoUso && <span className="bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider">Válido 1 Vez</span>}
-                         {esCumple && <span className="bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider">Cumpleañero 🎂</span>}
+                         {esUnicoUso && <span className="bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider">Válido 1 Vez</span>}
+                         {esCumple && <span className="bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider">Cumpleañero 🎂</span>}
                          {p.diasValidos && p.diasValidos !== "Todos los días" && <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider">{p.diasValidos}</span>}
                       </div>
 
@@ -748,7 +760,7 @@ export default function TarjetaDigital() {
 
                             <div className={`mt-auto pt-4 border-t flex justify-between items-center ${modoOscuro ? "border-white/10" : "border-slate-100"}`}>
                                <div className="flex -space-x-2">
-                                 <span className="w-6 h-6 rounded-full bg-orange-100 text-xs flex items-center justify-center z-10 border border-white">🏷️</span>
+                                 <span className="w-6 h-6 rounded-full bg-teal-100 text-xs flex items-center justify-center z-10 border border-white">🏷️</span>
                                  <span className="w-6 h-6 rounded-full bg-emerald-100 text-xs flex items-center justify-center z-0 border border-white">🎉</span>
                                </div>
                                <p className={`text-[10px] font-bold uppercase tracking-widest transition-colors ${modoOscuro ? "text-slate-400 group-hover:text-violet-400" : "text-slate-400 group-hover:text-violet-600"}`}>Ver Perfil →</p>

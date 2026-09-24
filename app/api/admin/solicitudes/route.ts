@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb, requireAdmin } from "@/lib/firebase-admin";
-import { sendSystemMail } from "@/lib/mailer";
+import { publicAppUrl, sendSystemMail } from "@/lib/mailer";
 import { removeStoredFile, saveDataUrl } from "@/lib/server-storage";
 
 export const runtime = "nodejs";
@@ -23,7 +23,7 @@ async function getOrCreateUser(email: string, name: string) {
 }
 
 async function activationLink(email: string, loginPath: string) {
-  const appUrl = (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
+  const appUrl = publicAppUrl();
   const firebaseLink = await adminAuth.generatePasswordResetLink(email, { url: `${appUrl}/${loginPath}`, handleCodeInApp: false });
   try {
     const generated = new URL(firebaseLink);
@@ -84,7 +84,7 @@ export async function POST(request: Request) {
           codigoUnicoQR: `TJE-${crypto.randomBytes(12).toString("hex").toUpperCase()}`,
         });
         if (typeof payload.fotoPerfil === "string" && payload.fotoPerfil.startsWith("data:")) {
-          const image = await saveDataUrl(payload.fotoPerfil, "jovenes_perfiles", 1_500_000);
+          const image = await saveDataUrl(payload.fotoPerfil, "jovenes_perfiles", 300_000);
           active.fotoPerfil = image.url;
           active.fotoPerfilPath = image.path;
         }
@@ -98,7 +98,7 @@ export async function POST(request: Request) {
           lng: Number(payload.lng),
         });
         if (typeof payload.logo === "string" && payload.logo.startsWith("data:")) {
-          const image = await saveDataUrl(payload.logo, "negocios_logos", 1_500_000);
+          const image = await saveDataUrl(payload.logo, "negocios_logos", 250_000);
           active.logo = image.url;
           active.logoPath = image.path;
         }
@@ -108,10 +108,6 @@ export async function POST(request: Request) {
       if (type === "joven") batch.set(adminDb.collection("tarjetas").doc(user.uid), {
         authUid: user.uid,
         codigoUnicoQR: active.codigoUnicoQR,
-        nombreCompleto: active.nombreCompleto,
-        genero: active.genero,
-        fechaNacimiento: active.fechaNacimiento,
-        fotoPerfil: active.fotoPerfil || null,
         estatus: "Activo",
       });
       batch.set(adminDb.collection("sistema").doc("estado"), { ultimaActualizacion: Date.now() }, { merge: true });
@@ -187,10 +183,6 @@ export async function POST(request: Request) {
       batch.set(adminDb.collection("tarjetas").doc(user.uid), {
         authUid: user.uid,
         codigoUnicoQR: activeData.codigoUnicoQR,
-        nombreCompleto: activeData.nombreCompleto,
-        genero: activeData.genero || "No especificado",
-        fechaNacimiento: activeData.fechaNacimiento,
-        fotoPerfil: activeData.fotoPerfil,
         estatus: "Activo",
       });
     }

@@ -20,7 +20,7 @@ const criticalBrandCss = `
     position: absolute;
     inset: -2px;
     border-radius: 19px;
-    background: conic-gradient(from 30deg, #F58220, #F4C425, #25883A, #24B5D6, #F70476, #F58220);
+    background: conic-gradient(from 30deg, #64748B, #94A3B8, #5F766D, #78909C, #7C7896, #64748B);
     animation: critical-brand-spin 14s linear infinite !important;
   }
   .brand-logo-stage > img {
@@ -101,7 +101,7 @@ export default function RootLayout({
     <html lang="es">
       <head>
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#D65F08" />
+        <meta name="theme-color" content="#0F766E" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
         <style dangerouslySetInnerHTML={{ __html: criticalBrandCss }} />
       </head>
