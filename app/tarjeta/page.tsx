@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { useRouter } from "next/navigation";
-import { doc, collection, getDocs, query, where, getDoc } from "firebase/firestore"; 
+import { doc, collection, getDocs, limit, query, where, getDoc } from "firebase/firestore"; 
 import { EmailAuthProvider, onAuthStateChanged, reauthenticateWithCredential, signOut, updatePassword } from "firebase/auth";
 import { auth, db } from "../../firebase";
 
@@ -116,14 +116,14 @@ export default function TarjetaDigital() {
 
       if (ultimaActDB > cacheVersionLocal || cacheVersionLocal === 0) {
         
-        const snapPromos = await getDocs(query(collection(db, "promociones"), where("estatus", "==", "Activa")));
+        const snapPromos = await getDocs(query(collection(db, "promociones"), where("estatus", "==", "Activa"), limit(200)));
         snapPromos.forEach((d) => pTemp.push({ idFirebase: d.id, ...d.data() }));
 
-        const snapEmpleos = await getDocs(query(collection(db, "empleos"), where("estatus", "==", "Activa")));
+        const snapEmpleos = await getDocs(query(collection(db, "empleos"), where("estatus", "==", "Activa"), limit(200)));
         snapEmpleos.forEach((d) => eTemp.push({ idFirebase: d.id, ...d.data() }));
 
         // CORRECCIÓN DIRECTORIO: Carga todos los negocios excepto los "Pendiente"
-        const snapNegocios = await getDocs(query(collection(db, "negocios"), where("estatus", "==", "Activo")));
+        const snapNegocios = await getDocs(query(collection(db, "negocios"), where("estatus", "==", "Activo"), limit(250)));
         snapNegocios.forEach((d) => nTemp.push({ idFirebase: d.id, ...d.data() }));
 
         localStorage.setItem("cache_promos", JSON.stringify(pTemp));
@@ -141,7 +141,7 @@ export default function TarjetaDigital() {
       setListaEmpleos(eTemp);
       setListaNegocios(nTemp);
 
-      const qHistorial = query(collection(db, "visitas"), where("youthUid", "==", idJoven));
+      const qHistorial = query(collection(db, "visitas"), where("youthUid", "==", idJoven), limit(200));
       const snapHistorial = await getDocs(qHistorial);
       const hTemp: any[] = [];
       snapHistorial.forEach((d) => hTemp.push({ idFirebase: d.id, ...d.data() }));
@@ -156,7 +156,7 @@ export default function TarjetaDigital() {
         });
       }
 
-      const snapAvisos = await getDocs(query(collection(db, "anuncios")));
+      const snapAvisos = await getDocs(query(collection(db, "anuncios"), limit(50)));
       const aTemp: any[] = [];
       snapAvisos.forEach((d) => {
         const data = d.data();

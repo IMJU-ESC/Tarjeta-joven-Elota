@@ -91,8 +91,11 @@ export default function AvisoDePrivacidad() {
 
           <section>
             <h2 className="text-xl font-black text-[#0F766E] mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">6. Transferencia de Datos Personales</h2>
+            <p className="mb-4">
+              Para aplicar un beneficio, un Negocio Aliado con sesión activa podrá escanear el QR y visualizar temporalmente sólo la información mínima necesaria para confirmar la identidad y vigencia de la tarjeta: <strong>nombre, fotografía, nivel y, en su caso, un indicador de cumpleaños</strong>. El negocio no recibe correo, domicilio, género, fecha completa de nacimiento ni documentos de validación.
+            </p>
             <p>
-              Se informa de manera expresa que <strong>no se realizarán transferencias de datos personales</strong> de los jóvenes hacia los Negocios Aliados ni a ninguna otra empresa privada. Las únicas excepciones aplicables serán aquellas transferencias estrictamente necesarias para atender requerimientos de información de una autoridad competente (judicial o administrativa), siempre que estén debidamente fundados y motivados conforme a la legislación vigente.
+              El historial comercial utiliza un identificador interno y conserva únicamente el negocio, la fecha y el beneficio aplicado; los reportes del negocio no muestran el nombre ni datos demográficos del joven. No se autoriza al negocio a copiar, reutilizar o transferir la información mostrada. Fuera de esta validación limitada, no se compartirán datos con empresas privadas, salvo requerimiento debidamente fundado de una autoridad competente.
             </p>
           </section>
 

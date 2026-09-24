@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { collection, query, where, getDocs, addDoc, deleteDoc, doc, updateDoc, setDoc, getDoc } from "firebase/firestore";
+import { collection, query, where, getDocs, addDoc, deleteDoc, doc, updateDoc, setDoc, getDoc, limit } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { EmailAuthProvider, onAuthStateChanged, reauthenticateWithCredential, signOut, updatePassword } from "firebase/auth";
 import { auth, db, storage } from "../../firebase"; 
@@ -113,6 +113,20 @@ export default function PortalNegocios() {
     }
   };
 
+  const ejecutarTarjetaSegura = async (payload: Record<string, unknown>) => {
+    const user = auth.currentUser;
+    if (!user) throw new Error("La sesión del negocio terminó. Vuelve a ingresar.");
+    const token = await user.getIdToken();
+    const response = await fetch("/api/negocio/tarjeta", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "No fue posible completar la operación.");
+    return result;
+  };
+
   useEffect(() => {
     import("leaflet").then((L) => {
       delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -212,46 +226,11 @@ export default function PortalNegocios() {
     }
 
     try {
-      // Una sola condición evita requerir un índice compuesto de Firestore.
-      const res = await getDocs(query(collection(db, "tarjetas"), where("codigoUnicoQR", "==", codigoLimpio)));
-      if (res.empty) { 
-         audioError.current?.play().catch(()=>{}); 
-         setMensajeEscaner("No encontramos ese QR. Ajusta la distancia y vuelve a enfocarlo.");
-         alert("❌ No encontramos una Tarjeta Joven activa con ese código."); 
-         setModoEscaner(true); 
-      } else {
-        let dataJoven: any = { idFirebase: res.docs[0].id, ...res.docs[0].data() };
-        if (dataJoven.estatus !== "Activo") throw new Error("La tarjeta todavía no está activa.");
-        // El negocio solo puede leer sus propias visitas. Consultar por ownerUid
-        // mantiene las reglas cerradas y evita el error permission-denied.
-        const negocioUid = auth.currentUser?.uid;
-        if (!negocioUid) throw new Error("La sesión del negocio ya no está disponible.");
-        const snapVisitas = await getDocs(query(collection(db, "visitas"), where("ownerUid", "==", negocioUid)));
-        
-        const fechaActual = new Date(); let visitasActivas = 0;
-        snapVisitas.forEach(v => {
-          const d = v.data();
-          if (d.youthUid !== dataJoven.idFirebase) return;
-          const diasTranscurridos = (fechaActual.getTime() - new Date(d.fecha).getTime()) / (1000 * 3600 * 24);
-          if (diasTranscurridos <= 90) visitasActivas++;
-        });
-
-        let esCumpleHoy = false;
-        if(dataJoven.fechaNacimiento) {
-           const cumple = new Date(dataJoven.fechaNacimiento);
-           if(cumple.getUTCMonth() === fechaActual.getMonth() && cumple.getUTCDate() === fechaActual.getDate()) { esCumpleHoy = true; }
-        }
-
-        dataJoven.visitasTotales = visitasActivas;
-        dataJoven.nivelUserNum = visitasActivas >= 40 ? 3 : (visitasActivas >= 15 ? 2 : 1);
-        dataJoven.nivelNombre = visitasActivas >= 40 ? "Black" : (visitasActivas >= 15 ? "Oro" : "Clásica");
-        dataJoven.esCumple = esCumpleHoy;
-
-        audioExito.current?.play().catch(()=>{}); 
-        setJovenEscaneado(dataJoven); 
-        setPromoAplicada(""); 
-        setModoEscaner(false);
-      }
+      const result = await ejecutarTarjetaSegura({ accion: "validar", codigoQR: codigoLimpio });
+      audioExito.current?.play().catch(()=>{});
+      setJovenEscaneado(result.tarjeta);
+      setPromoAplicada("");
+      setModoEscaner(false);
     } catch (error: any) { 
       audioError.current?.play().catch(()=>{}); 
       console.error("Validación QR:", error);
@@ -277,7 +256,7 @@ export default function PortalNegocios() {
   };
 
   const cargarAvisos = async () => {
-      const snapAvisos = await getDocs(query(collection(db, "anuncios")));
+      const snapAvisos = await getDocs(query(collection(db, "anuncios"), limit(50)));
       const aTemp: any[] = [];
       snapAvisos.forEach((d) => {
         const data = d.data();
@@ -300,7 +279,7 @@ export default function PortalNegocios() {
   const cargarEstadisticas = async () => {
     if (!datosNegocio) return;
     setCargandoMetricas(true);
-    const snap = await getDocs(query(collection(db, "visitas"), where("ownerUid", "==", datosNegocio.idFirebase)));
+    const snap = await getDocs(query(collection(db, "visitas"), where("ownerUid", "==", datosNegocio.idFirebase), limit(300)));
     const temp: any[] = [];
     snap.forEach((doc) => temp.push({ idVisita: doc.id, ...doc.data() }));
     temp.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
@@ -308,12 +287,12 @@ export default function PortalNegocios() {
   };
 
   const cargarEmpleos = async () => {
-    const snap = await getDocs(query(collection(db, "empleos"), where("ownerUid", "==", datosNegocio.idFirebase)));
+    const snap = await getDocs(query(collection(db, "empleos"), where("ownerUid", "==", datosNegocio.idFirebase), limit(100)));
     const temp: any[] = []; snap.forEach((d) => temp.push({ idFirebase: d.id, ...d.data() })); setListaEmpleos(temp);
   };
 
   const cargarPromos = async () => {
-    const snap = await getDocs(query(collection(db, "promociones"), where("ownerUid", "==", datosNegocio.idFirebase)));
+    const snap = await getDocs(query(collection(db, "promociones"), where("ownerUid", "==", datosNegocio.idFirebase), limit(100)));
     const temp: any[] = []; snap.forEach((d) => temp.push({ idFirebase: d.id, ...d.data() })); setListaPromos(temp);
   };
 
@@ -344,26 +323,32 @@ export default function PortalNegocios() {
 
       if (bloqueadaPorDia) { audioError.current?.play().catch(()=>{}); alert(`❌ RECHAZADA:\nPromo válida solo: ${p.diasValidos}. Hoy es ${hoyTexto}.`); setRegistrandoVisita(false); return; }
       if (p.tipo === "Directa" && p.usoUnico) {
-        if (historialVisitas.some(v => v.idJoven === jovenEscaneado.idFirebase && v.idPromo === p.idFirebase)) {
+        if (historialVisitas.some(v => (v.youthUid || v.idJoven) === jovenEscaneado.idFirebase && v.idPromo === p.idFirebase)) {
           audioError.current?.play().catch(()=>{}); alert("❌ RECHAZADA:\nEste joven ya usó este cupón de Único Uso."); setRegistrandoVisita(false); return;
         }
       }
     }
 
     try {
-      const docRef = await addDoc(collection(db, "visitas"), {
-        ownerUid: auth.currentUser!.uid, youthUid: jovenEscaneado.idFirebase, idNegocio: datosNegocio.idFirebase, nombreNegocio: datosNegocio.nombreComercial, idJoven: jovenEscaneado.idFirebase, nombreJoven: jovenEscaneado.nombreCompleto,
-        generoJoven: jovenEscaneado.genero || "No especificado", idPromo: promoAplicada || "ninguna", nombrePromo: p ? p.titulo : "Visita estándar", fecha: new Date().toISOString()
+      const result = await ejecutarTarjetaSegura({
+        accion: "registrar",
+        codigoQR: jovenEscaneado.codigoUnicoQR,
+        promoId: promoAplicada || "",
       });
-      audioExito.current?.play().catch(()=>{}); setJovenEscaneado(null); setPromoAplicada(""); setUltimaVisitaId(docRef.id); cargarEstadisticas();
-    } catch (e) { audioError.current?.play().catch(()=>{}); }
+      audioExito.current?.play().catch(()=>{}); setJovenEscaneado(null); setPromoAplicada(""); setUltimaVisitaId(result.visitaId); cargarEstadisticas();
+    } catch (error: any) {
+      audioError.current?.play().catch(()=>{});
+      alert(error?.message || "No fue posible registrar la visita.");
+    }
     setRegistrandoVisita(false);
   };
 
   const deshacerUltimaVisita = async () => {
     if (!ultimaVisitaId) return;
-    try { await deleteDoc(doc(db, "visitas", ultimaVisitaId)); setUltimaVisitaId(null); cargarEstadisticas(); alert("✅ Movimiento deshecho."); } 
-    catch(e) { alert("Error al deshacer el movimiento."); }
+    try {
+      await ejecutarTarjetaSegura({ accion: "deshacer", visitaId: ultimaVisitaId });
+      setUltimaVisitaId(null); cargarEstadisticas(); alert("✅ Movimiento deshecho.");
+    } catch (error: any) { alert(error?.message || "Error al deshacer el movimiento."); }
   };
 
   const limpiarFormulario = () => { setTitulo(""); setDescripcion(""); setDireccion(""); setSueldo(""); setTipoEmpleo(""); setTelefono(""); setTipoPromo(""); setVisitasRequeridas(""); setDiasValidos("Todos los días"); setFechaVencimiento(""); setUsoUnico(false); setNivelRequerido("Clásica"); setCreandoModal(null); setImgPromoFile(null); setImgPromoPreview(null); };
@@ -527,10 +512,11 @@ export default function PortalNegocios() {
   };
 
   const descargarExcelEstadisticas = () => {
-    let csvContent = "\uFEFFFecha,Joven,Género,Promoción\n";
+    let csvContent = "\uFEFFFecha,Identificador anónimo,Promoción\n";
     visitasFiltradas.forEach(v => { 
-      const f = new Date(v.fecha).toLocaleString("es-MX"); const g = v.generoJoven || "No especificado";
-      csvContent += `"${f}","${v.nombreJoven}","${g}","${v.nombrePromo}"\n`; 
+      const f = new Date(v.fecha).toLocaleString("es-MX");
+      const anonimo = String(v.youthUid || v.idJoven || "registro").slice(0, 8);
+      csvContent += `"${f}","${anonimo}","${v.nombrePromo}"\n`; 
     });
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; 
@@ -914,25 +900,15 @@ export default function PortalNegocios() {
               </div>
               <div className="bg-white dark:bg-slate-800 p-6 rounded-[2.5rem] shadow-lg shadow-slate-200/50 dark:shadow-none text-center border border-slate-50 dark:border-slate-700 relative overflow-hidden">
                 <div className="absolute -right-4 -top-4 text-6xl opacity-5 dark:opacity-10">👥</div>
-                <p className="text-5xl font-black text-emerald-500 dark:text-emerald-400 tracking-tighter">{new Set(visitasFiltradas.map(v => v.idJoven)).size}</p>
+                <p className="text-5xl font-black text-emerald-500 dark:text-emerald-400 tracking-tighter">{new Set(visitasFiltradas.map(v => v.youthUid || v.idJoven)).size}</p>
                 <p className="text-[10px] text-slate-400 dark:text-slate-500 font-black uppercase mt-2 tracking-widest">Clientes Únicos</p>
               </div>
 
               {visitasFiltradas.length > 0 && (
-                 <div className="bg-white dark:bg-slate-800 p-5 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-700 col-span-2">
-                    <h3 className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3 flex items-center justify-center gap-2">Demografía por Género</h3>
-                    <div className="flex justify-around items-center pt-2">
-                       {['Mujer', 'Hombre', 'No Binario'].map(gen => {
-                          const cantidad = visitasFiltradas.filter(v => v.generoJoven === gen).length;
-                          return (
-                              <div key={gen} className="text-center">
-                                <p className="text-2xl font-black text-slate-700 dark:text-slate-200">{cantidad}</p>
-                                <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase mt-1">{gen}</p>
-                              </div>
-                          );
-                       })}
-                    </div>
-                 </div>
+                <div className="col-span-2 rounded-[2.5rem] border border-slate-100 bg-white p-5 text-center shadow-sm dark:border-slate-700 dark:bg-slate-800">
+                  <p className="text-2xl font-black text-violet-500">{Math.max(0, visitasFiltradas.length - new Set(visitasFiltradas.map(v => v.youthUid || v.idJoven)).size)}</p>
+                  <p className="mt-1 text-[9px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Visitas recurrentes · sin mostrar datos personales</p>
+                </div>
               )}
             </div>
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, limit, query, where } from "firebase/firestore";
 import { db } from "../../firebase";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -44,7 +44,7 @@ export default function DirectorioNegocios() {
     setCargando(true);
     try {
       // 1. Cargar todos los negocios
-      const snapNegocios = await getDocs(query(collection(db, "negocios"), where("estatus", "==", "Activo")));
+      const snapNegocios = await getDocs(query(collection(db, "negocios"), where("estatus", "==", "Activo"), limit(250)));
       const tempNegocios: any[] = [];
       snapNegocios.forEach((doc) => {
         tempNegocios.push({ idFirebase: doc.id, ...doc.data() });
@@ -52,7 +52,7 @@ export default function DirectorioNegocios() {
       setNegocios(tempNegocios);
 
       // 2. Cargar todas las promociones activas en la plataforma
-      const snapPromos = await getDocs(query(collection(db, "promociones"), where("estatus", "==", "Activa")));
+      const snapPromos = await getDocs(query(collection(db, "promociones"), where("estatus", "==", "Activa"), limit(250)));
       const tempPromos: any[] = [];
       snapPromos.forEach((doc) => {
         tempPromos.push({ idFirebase: doc.id, ...doc.data() });

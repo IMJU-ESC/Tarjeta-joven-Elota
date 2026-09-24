@@ -61,3 +61,16 @@ export async function requireAdmin(request: Request) {
   if (rol !== "Master" && rol !== "Staff") throw new Error("NO_ADMIN");
   return { uid: decoded.uid, rol };
 }
+
+export async function requireActiveBusiness(request: Request) {
+  assertAdminEnv();
+  const authorization = request.headers.get("authorization") || "";
+  const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  if (!token) throw new Error("NO_AUTH");
+
+  const decoded = await adminAuth.verifyIdToken(token);
+  const businessDoc = await adminDb.collection("negocios").doc(decoded.uid).get();
+  if (!businessDoc.exists || businessDoc.data()?.estatus !== "Activo") throw new Error("NO_BUSINESS");
+
+  return { uid: decoded.uid, negocio: businessDoc.data()! };
+}

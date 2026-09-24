@@ -108,10 +108,6 @@ export async function POST(request: Request) {
       if (type === "joven") batch.set(adminDb.collection("tarjetas").doc(user.uid), {
         authUid: user.uid,
         codigoUnicoQR: active.codigoUnicoQR,
-        nombreCompleto: active.nombreCompleto,
-        genero: active.genero,
-        fechaNacimiento: active.fechaNacimiento,
-        fotoPerfil: active.fotoPerfil || null,
         estatus: "Activo",
       });
       batch.set(adminDb.collection("sistema").doc("estado"), { ultimaActualizacion: Date.now() }, { merge: true });
@@ -187,10 +183,6 @@ export async function POST(request: Request) {
       batch.set(adminDb.collection("tarjetas").doc(user.uid), {
         authUid: user.uid,
         codigoUnicoQR: activeData.codigoUnicoQR,
-        nombreCompleto: activeData.nombreCompleto,
-        genero: activeData.genero || "No especificado",
-        fechaNacimiento: activeData.fechaNacimiento,
-        fotoPerfil: activeData.fotoPerfil,
         estatus: "Activo",
       });
     }

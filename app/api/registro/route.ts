@@ -10,7 +10,9 @@ const emailOk = (value: string) => /^\S+@\S+\.\S+$/.test(value);
 
 function validOrigin(request: Request) {
   const origin = request.headers.get("origin");
-  if (!origin) return true;
+  if (!origin) return process.env.NODE_ENV !== "production";
+  const fetchSite = request.headers.get("sec-fetch-site");
+  if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "same-site") return false;
   try {
     if (origin === new URL(request.url).origin) return true;
   } catch {
@@ -78,6 +80,9 @@ export async function POST(request: Request) {
   try {
     assertAdminEnv();
     if (!validOrigin(request)) return NextResponse.json({ error: "Origen no autorizado." }, { status: 403 });
+    if (!request.headers.get("content-type")?.toLowerCase().includes("application/json")) {
+      return NextResponse.json({ error: "Formato de solicitud no válido." }, { status: 415 });
+    }
     const body = await request.json();
     const type = body?.tipo === "negocio" ? "negocio" : body?.tipo === "joven" ? "joven" : "";
     const email = text(body?.correo, 180).toLowerCase();
