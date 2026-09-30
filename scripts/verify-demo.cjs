@@ -131,7 +131,7 @@ async function main(){
     await click('Empleos');
     await page.locator('[data-action=job][data-id="'+job.id+'"]').click();
     await click('Enviar interés de prueba');
-    assert.equal(await page.getByRole('button',{name:'Interés enviado',exact:true}).isDisabled(),true);
+    assert.equal(await page.locator('#modal').getByRole('button',{name:'Interés enviado',exact:true}).isDisabled(),true);
     await page.getByRole('button',{name:'Cerrar',exact:true}).click();
     await visit('/portal-negocios');
     await page.locator('[data-action=applicants][data-id="'+job.id+'"]').click();
