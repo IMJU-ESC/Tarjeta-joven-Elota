@@ -80,11 +80,15 @@ function publicRegistrationError(error: any) {
 export async function POST(request: Request) {
   const createdPaths: string[] = [];
   try {
-    assertAdminEnv();
     if (!validOrigin(request)) return NextResponse.json({ error: "Origen no autorizado." }, { status: 403 });
     if (!request.headers.get("content-type")?.toLowerCase().includes("application/json")) {
       return NextResponse.json({ error: "Formato de solicitud no válido." }, { status: 415 });
     }
+    const contentLength = Number(request.headers.get("content-length") || 0);
+    if (Number.isFinite(contentLength) && contentLength > 2_500_000) {
+      return NextResponse.json({ error: "La solicitud supera el tamaño permitido." }, { status: 413 });
+    }
+    assertAdminEnv();
     const body = await request.json();
     const type = body?.tipo === "negocio" ? "negocio" : body?.tipo === "joven" ? "joven" : "";
     const email = text(body?.correo, 180).toLowerCase();

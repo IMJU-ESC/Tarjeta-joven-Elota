@@ -43,16 +43,14 @@ export default function DirectorioNegocios() {
   const cargarDatos = async () => {
     setCargando(true);
     try {
-      // 1. Cargar todos los negocios
-      const snapNegocios = await getDocs(query(collection(db, "negocios"), where("estatus", "==", "Activo"), limit(250)));
-      const tempNegocios: any[] = [];
-      snapNegocios.forEach((doc) => {
-        tempNegocios.push({ idFirebase: doc.id, ...doc.data() });
-      });
-      setNegocios(tempNegocios);
+      const [directorioResponse, snapPromos] = await Promise.all([
+        fetch("/api/directorio", { cache: "no-store" }),
+        getDocs(query(collection(db, "promociones"), where("estatus", "==", "Activa"), limit(250))),
+      ]);
+      if (!directorioResponse.ok) throw new Error("No fue posible cargar el directorio seguro.");
+      const directorio = await directorioResponse.json();
+      setNegocios(Array.isArray(directorio.negocios) ? directorio.negocios : []);
 
-      // 2. Cargar todas las promociones activas en la plataforma
-      const snapPromos = await getDocs(query(collection(db, "promociones"), where("estatus", "==", "Activa"), limit(250)));
       const tempPromos: any[] = [];
       snapPromos.forEach((doc) => {
         tempPromos.push({ idFirebase: doc.id, ...doc.data() });

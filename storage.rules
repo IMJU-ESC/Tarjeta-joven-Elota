@@ -8,7 +8,8 @@ service firebase.storage {
     }
     function negocioActivo() {
       return request.auth != null
-        && firestore.exists(/databases/(default)/documents/negocios/$(request.auth.uid));
+        && firestore.exists(/databases/(default)/documents/negocios/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/negocios/$(request.auth.uid)).data.estatus == "Activo";
     }
     function imagenLigera() {
       return request.resource != null

@@ -127,8 +127,12 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: `La promoción es válida únicamente: ${diasValidos}.` }, { status: 409 });
       }
       const meta = Number(datosPromo.visitasMeta);
-      if (datosPromo.tipo === "Frecuente" && Number.isFinite(meta) && meta > recientes.length) {
-        return NextResponse.json({ error: `Faltan ${meta - recientes.length} visita(s) para desbloquear este beneficio.` }, { status: 409 });
+      if (datosPromo.tipo === "Frecuente" && Number.isFinite(meta) && meta > 0) {
+        const canjesPrevios = recientes.filter((visita) => visita.data().idPromo === promo.id).length;
+        const siguienteMeta = meta * (canjesPrevios + 1);
+        if (recientes.length < siguienteMeta) {
+          return NextResponse.json({ error: `Faltan ${siguienteMeta - recientes.length} visita(s) para desbloquear este beneficio.` }, { status: 409 });
+        }
       }
       if (datosPromo.tipo === "Directa" && datosPromo.usoUnico && recientes.some((visita) => visita.data().idPromo === promo.id)) {
         return NextResponse.json({ error: "Este beneficio de uso único ya fue utilizado." }, { status: 409 });

@@ -175,6 +175,13 @@ export async function POST(request: Request) {
       activeData.codigoUnicoQR = data.codigoUnicoQR || `TJE-${crypto.randomBytes(12).toString("hex").toUpperCase()}`;
     }
 
+    // La evidencia sólo existe para validar la solicitud. Se elimina antes de
+    // activar el expediente para impedir que una aprobación conserve el archivo.
+    await Promise.all([
+      removeStoredFile(data.documentoProbatorioPath),
+      removeStoredFile(data.evidenciaFachadaPath),
+    ]);
+
     const targetRef = adminDb.collection(collection).doc(user.uid);
     const batch = adminDb.batch();
     batch.set(targetRef, activeData, { merge: true });
@@ -188,7 +195,6 @@ export async function POST(request: Request) {
     }
     batch.set(adminDb.collection("sistema").doc("estado"), { ultimaActualizacion: Date.now() }, { merge: true });
     await batch.commit();
-    await Promise.all([removeStoredFile(data.documentoProbatorioPath), removeStoredFile(data.evidenciaFachadaPath)]);
 
     const link = await activationLink(email, loginPath);
     let emailSent = true;

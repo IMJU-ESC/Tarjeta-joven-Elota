@@ -17,6 +17,38 @@ const Popup = dynamic(() => import("react-leaflet").then((mod) => mod.Popup), { 
 
 const INSTAGRAM_URL = "https://www.instagram.com/imjuelotamx?stkn=M24xYzdweDVzMDI3";
 const FACEBOOK_URL = "https://www.facebook.com/profile.php?id=100075974077385";
+const DIAS_SEMANA = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
+function aplicaHoy(promo: any) {
+  const regla = promo?.diasValidos || "Todos los días";
+  const hoy = DIAS_SEMANA[new Date().getDay()];
+  const finDeSemana = hoy === "Sábado" || hoy === "Domingo";
+  if (regla === "Fines de semana") return finDeSemana;
+  if (regla === "Lunes a Viernes") return !finDeSemana;
+  if (regla.startsWith("Solo ")) return regla === `Solo ${hoy}`;
+  return true;
+}
+
+function fechaLegible(fecha?: string) {
+  if (!fecha) return "Sin fecha límite";
+  const valor = new Date(`${fecha}T12:00:00`);
+  if (Number.isNaN(valor.getTime())) return "Fecha por confirmar";
+  return valor.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
+}
+
+function diasParaVencer(fecha?: string) {
+  if (!fecha) return null;
+  const cierre = new Date(`${fecha}T23:59:59`).getTime();
+  if (!Number.isFinite(cierre)) return null;
+  return Math.max(0, Math.ceil((cierre - Date.now()) / 86_400_000));
+}
+
+function cumpleHoy(fecha?: string) {
+  if (!fecha) return false;
+  const partes = fecha.split("-").map(Number);
+  const hoy = new Date();
+  return partes.length === 3 && partes[1] === hoy.getMonth() + 1 && partes[2] === hoy.getDate();
+}
 
 export default function TarjetaDigital() {
   const [datosJoven, setDatosJoven] = useState<any>(null);
@@ -24,6 +56,7 @@ export default function TarjetaDigital() {
   const [filtroTipoPromo, setFiltroTipoPromo] = useState("todos"); 
   
   const [qrAmpliado, setQrAmpliado] = useState(false);
+  const [cuponSeleccionado, setCuponSeleccionado] = useState<any>(null);
   const [listaPromos, setListaPromos] = useState<any[]>([]);
   const [listaEmpleos, setListaEmpleos] = useState<any[]>([]);
   const [miHistorial, setMiHistorial] = useState<any[]>([]);
@@ -116,15 +149,16 @@ export default function TarjetaDigital() {
 
       if (ultimaActDB > cacheVersionLocal || cacheVersionLocal === 0) {
         
-        const snapPromos = await getDocs(query(collection(db, "promociones"), where("estatus", "==", "Activa"), limit(200)));
+        const [snapPromos, snapEmpleos, directorioResponse] = await Promise.all([
+          getDocs(query(collection(db, "promociones"), where("estatus", "==", "Activa"), limit(200))),
+          getDocs(query(collection(db, "empleos"), where("estatus", "==", "Activa"), limit(200))),
+          fetch("/api/directorio", { cache: "no-store" }),
+        ]);
         snapPromos.forEach((d) => pTemp.push({ idFirebase: d.id, ...d.data() }));
-
-        const snapEmpleos = await getDocs(query(collection(db, "empleos"), where("estatus", "==", "Activa"), limit(200)));
         snapEmpleos.forEach((d) => eTemp.push({ idFirebase: d.id, ...d.data() }));
-
-        // CORRECCIÓN DIRECTORIO: Carga todos los negocios excepto los "Pendiente"
-        const snapNegocios = await getDocs(query(collection(db, "negocios"), where("estatus", "==", "Activo"), limit(250)));
-        snapNegocios.forEach((d) => nTemp.push({ idFirebase: d.id, ...d.data() }));
+        if (!directorioResponse.ok) throw new Error("No fue posible cargar el directorio seguro.");
+        const directorio = await directorioResponse.json();
+        nTemp = Array.isArray(directorio.negocios) ? directorio.negocios : [];
 
         localStorage.setItem("cache_promos", JSON.stringify(pTemp));
         localStorage.setItem("cache_empleos", JSON.stringify(eTemp));
@@ -264,12 +298,15 @@ export default function TarjetaDigital() {
     }
   }, [misionesCompletadas, datosJoven]);
 
-  const obtenerProgreso = (idPromo: string, meta: number) => {
-    const usos = miHistorial.filter(v => v.idPromo === idPromo).length;
-    let actual = usos % meta;
-    if (usos > 0 && actual === 0) actual = meta;
+  const obtenerProgreso = (idNegocio: string, meta: number) => {
+    const visitas = miHistorial.filter(v => {
+      const dias = (Date.now() - new Date(v.fecha).getTime()) / 86_400_000;
+      return v.idNegocio === idNegocio && dias >= 0 && dias <= 90;
+    }).length;
+    let actual = visitas % meta;
+    if (visitas > 0 && actual === 0) actual = meta;
     const porcentaje = (actual / meta) * 100;
-    return { actual, porcentaje, usosTotales: usos };
+    return { actual, porcentaje, usosTotales: visitas };
   };
 
   const descargarQR = () => {
@@ -419,6 +456,29 @@ export default function TarjetaDigital() {
       n.giro?.toLowerCase().includes(busqueda.toLowerCase())
     );
   }
+
+  const negocioCupon = cuponSeleccionado
+    ? listaNegocios.find((negocio) => negocio.idFirebase === cuponSeleccionado.idNegocio)
+    : null;
+  const cuponDisponibleHoy = cuponSeleccionado ? aplicaHoy(cuponSeleccionado) : true;
+  const cuponDiasRestantes = diasParaVencer(cuponSeleccionado?.fechaVencimiento);
+  const cuponYaCanjeado = Boolean(
+    cuponSeleccionado?.usoUnico && miHistorial.some((visita) => visita.idPromo === cuponSeleccionado.idFirebase)
+  );
+  const progresoCupon = cuponSeleccionado?.tipo === "Frecuente"
+    ? obtenerProgreso(cuponSeleccionado.idNegocio, Number(cuponSeleccionado.visitasMeta) || 1)
+    : null;
+  const cuponCumpleDisponible = cuponSeleccionado?.tipo !== "Cumpleaños" || cumpleHoy(datosJoven.fechaNacimiento);
+  const cuponMetaDisponible = !progresoCupon || progresoCupon.actual >= Number(cuponSeleccionado?.visitasMeta || 1);
+  const cuponCanjeable = cuponDisponibleHoy && cuponCumpleDisponible && cuponMetaDisponible && !cuponYaCanjeado;
+  const coordenadasCupon = Number.isFinite(Number(negocioCupon?.lat)) && Number.isFinite(Number(negocioCupon?.lng))
+    ? `${Number(negocioCupon.lat)},${Number(negocioCupon.lng)}`
+    : `${cuponSeleccionado?.direccion || negocioCupon?.nombreComercial || "Elota"}, Elota, Sinaloa`;
+  const mapsCuponUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(coordenadasCupon)}`;
+  const telefonoCupon = String(negocioCupon?.telefono || "").replace(/\D/g, "");
+  const qrCanjeValue = cuponSeleccionado
+    ? `TJE1|${datosJoven.codigoUnicoQR}|${cuponSeleccionado.idFirebase}`
+    : datosJoven.codigoUnicoQR;
   
   const themeColors = esBlack 
     ? { bg: "bg-[#050505]", border: "border-white/10", glow1: "bg-violet-600 animate-pulse", glow2: "bg-fuchsia-600 animate-pulse", text: "from-violet-400 to-fuchsia-400", badge: "VIP BLACK" }
@@ -430,9 +490,6 @@ export default function TarjetaDigital() {
     <main className={`app-shell motion-enter min-h-screen pb-24 font-sans selection:bg-violet-500/30 transition-colors duration-500 overflow-x-hidden ${modoOscuro ? "bg-[#080A12] text-white" : "bg-[#F6F7F9] text-slate-900"}`}>
       {modalRutaCompletada && (
         <div className="fixed inset-0 z-[400] grid place-items-center overflow-hidden bg-slate-950/85 p-5 backdrop-blur-md" onClick={() => setModalRutaCompletada(false)}>
-          {["#64748B", "#f4c425", "#24b5d6", "#f70476", "#34d399", "#a78bfa"].map((color, index) => (
-            <span key={color} className="celebration-spark top-0" style={{ left: `${14 + index * 14}%`, background: color, animationDelay: `${index * .18}s`, ["--spark-x" as string]: `${index % 2 ? 35 : -30}px` }}></span>
-          ))}
           <section className="motion-enter relative w-full max-w-sm overflow-hidden rounded-[2.7rem] border border-white/10 bg-gradient-to-br from-[#171d31] to-[#080d18] p-7 text-center text-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="brand-orb absolute -right-16 -top-16 h-48 w-48 rounded-full bg-teal-400/20 blur-3xl"></div>
             <div className="relative mx-auto grid h-28 w-28 place-items-center rounded-[2.3rem] bg-gradient-to-br from-teal-400 via-pink-500 to-violet-600 text-6xl shadow-xl shadow-pink-950/40">🏅</div>
@@ -675,11 +732,15 @@ export default function TarjetaDigital() {
                     );
                   }
 
-                  const { actual, porcentaje } = obtenerProgreso(p.idFirebase, p.visitasMeta);
+                  const { actual, porcentaje } = obtenerProgreso(p.idNegocio, p.visitasMeta);
                   const esFrecuente = p.tipo === "Frecuente";
                   const esCumple = p.tipo === "Cumpleaños";
                   const esUnicoUso = p.usoUnico === true;
                   const yaCanjeado = esUnicoUso && miHistorial.some(v => v.idPromo === p.idFirebase);
+                  const negocioPromo = listaNegocios.find((negocio) => negocio.idFirebase === p.idNegocio);
+                  const ubicacionPromo = Number.isFinite(Number(negocioPromo?.lat)) && Number.isFinite(Number(negocioPromo?.lng))
+                    ? `${Number(negocioPromo.lat)},${Number(negocioPromo.lng)}`
+                    : `${p.direccion || p.nombreNegocio}, Elota, Sinaloa`;
 
                   return (
                     <div key={p.idFirebase} className={`rounded-[2.5rem] p-6 transition-all duration-300 border ${modoOscuro ? "bg-[#111625] border-white/5" : "bg-white shadow-lg border-slate-100 hover:shadow-xl"} ${yaCanjeado ? "opacity-60 grayscale" : ""}`}>
@@ -720,14 +781,14 @@ export default function TarjetaDigital() {
                       )}
                       
                       <div className={`flex items-center justify-between pt-5 border-t ${modoOscuro ? "border-white/10" : "border-slate-100"}`}>
-                        <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.direccion + ', Elota, Sinaloa')}`} target="_blank" rel="noopener noreferrer" className={`text-[10px] font-bold flex items-center gap-1.5 hover:underline cursor-pointer ${modoOscuro ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-900"}`}>
+                        <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ubicacionPromo)}`} target="_blank" rel="noopener noreferrer" className={`text-[10px] font-bold flex items-center gap-1.5 hover:underline cursor-pointer ${modoOscuro ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-900"}`}>
                            <span className="text-red-500 text-base drop-shadow-sm">📍</span> <span className="truncate max-w-[120px]">{p.direccion}</span>
                         </a>
 
                         {yaCanjeado ? (
                           <span className="text-[10px] font-black px-6 py-3 rounded-full uppercase tracking-widest bg-slate-200 dark:bg-slate-800 text-slate-500 shadow-inner">Canjeado ✔️</span>
                         ) : (
-                          <button onClick={() => setQrAmpliado(true)} className={`text-[10px] font-black px-6 py-3 rounded-xl uppercase tracking-widest transition-all ${modoOscuro ? "bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-900/50" : "bg-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-slate-900/20 active:scale-95"}`}>Usar Cupón</button>
+                          <button onClick={() => setCuponSeleccionado(p)} className={`text-[10px] font-black px-6 py-3 rounded-xl uppercase tracking-widest transition-all ${modoOscuro ? "bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-900/50" : "bg-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-slate-900/20 active:scale-95"}`}>Ver y usar</button>
                         )}
                       </div>
                     </div>
@@ -986,17 +1047,98 @@ export default function TarjetaDigital() {
         </div>
       )}
 
+      {/* DETALLE DEL CUPÓN: informa primero y conserva el QR como confirmación final */}
+      {cuponSeleccionado && (
+        <div className="fixed inset-0 z-[190] flex items-end justify-center bg-slate-950/75 backdrop-blur-md sm:items-center sm:p-5" onClick={() => setCuponSeleccionado(null)}>
+          <section role="dialog" aria-modal="true" aria-label={`Usar cupón ${cuponSeleccionado.titulo}`} className={`motion-enter max-h-[94vh] w-full max-w-lg overflow-y-auto rounded-t-[2.4rem] border shadow-2xl sm:rounded-[2.4rem] ${modoOscuro ? "border-white/10 bg-[#111625] text-white" : "border-slate-100 bg-white text-slate-900"}`} onClick={(event) => event.stopPropagation()}>
+            <div className="relative overflow-hidden rounded-t-[2.4rem] bg-gradient-to-br from-violet-700 via-fuchsia-600 to-cyan-500 p-5 text-white sm:p-6">
+              <div className="absolute -right-16 -top-20 h-52 w-52 rounded-full bg-white/15 blur-3xl"></div>
+              <div className="relative flex items-start justify-between gap-4">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-white/25 bg-white p-1.5 shadow-lg">
+                    <img src={cuponSeleccionado.logoNegocio || negocioCupon?.logo || "/imju-elota.webp"} alt="" className="h-full w-full rounded-xl object-contain" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-[9px] font-black uppercase tracking-[.2em] text-white/70">{cuponSeleccionado.nombreNegocio}</p>
+                    <h2 className="mt-1 text-2xl font-black leading-tight tracking-tight">{cuponSeleccionado.titulo}</h2>
+                  </div>
+                </div>
+                <button onClick={() => setCuponSeleccionado(null)} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/15 bg-black/15 text-lg text-white" aria-label="Cerrar detalle del cupón">✕</button>
+              </div>
+              <div className="relative mt-5 flex flex-wrap gap-2">
+                <span className={`rounded-full px-3 py-1.5 text-[9px] font-black uppercase tracking-widest ${cuponCanjeable ? "bg-emerald-300 text-emerald-950" : cuponYaCanjeado ? "bg-slate-900/70 text-slate-200" : "bg-white text-violet-700"}`}>
+                  {cuponYaCanjeado ? "Canjeado" : !cuponDisponibleHoy ? `Disponible: ${cuponSeleccionado.diasValidos}` : !cuponCumpleDisponible ? "Disponible en tu cumpleaños" : !cuponMetaDisponible ? `Faltan ${Math.max(0, Number(cuponSeleccionado.visitasMeta || 1) - Number(progresoCupon?.actual || 0))} visitas` : "Disponible hoy"}
+                </span>
+                {cuponSeleccionado.usoUnico && <span className="rounded-full border border-white/20 bg-black/15 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest">Un solo uso</span>}
+                <span className="rounded-full border border-white/20 bg-black/15 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest">Nivel {cuponSeleccionado.nivelRequerido || "Clásica"}</span>
+              </div>
+            </div>
+
+            <div className="space-y-5 p-5 pb-7 sm:p-6">
+              {cuponSeleccionado.imagen && <img src={cuponSeleccionado.imagen} alt={`Promoción ${cuponSeleccionado.titulo}`} className={`h-44 w-full rounded-[1.7rem] border object-cover shadow-sm ${modoOscuro ? "border-white/10" : "border-slate-100"}`} />}
+
+              <p className={`text-sm font-medium leading-6 ${modoOscuro ? "text-slate-300" : "text-slate-600"}`}>{cuponSeleccionado.descripcion}</p>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className={`rounded-2xl border p-4 ${modoOscuro ? "border-white/10 bg-white/5" : "border-slate-100 bg-slate-50"}`}>
+                  <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Vigencia</p>
+                  <p className="mt-1 text-xs font-black">{fechaLegible(cuponSeleccionado.fechaVencimiento)}</p>
+                  {cuponDiasRestantes !== null && <p className={`mt-1 text-[10px] font-bold ${cuponDiasRestantes <= 3 ? "text-pink-500" : "text-cyan-500"}`}>{cuponDiasRestantes === 0 ? "Último día" : `${cuponDiasRestantes} días restantes`}</p>}
+                </div>
+                <div className={`rounded-2xl border p-4 ${modoOscuro ? "border-white/10 bg-white/5" : "border-slate-100 bg-slate-50"}`}>
+                  <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Cuándo aplica</p>
+                  <p className="mt-1 text-xs font-black">{cuponSeleccionado.diasValidos || "Todos los días"}</p>
+                  <p className="mt-1 line-clamp-2 text-[10px] font-bold text-slate-400">{negocioCupon?.horario || "Consulta el horario del local"}</p>
+                </div>
+              </div>
+
+              {progresoCupon && (
+                <div className={`rounded-2xl border p-4 ${modoOscuro ? "border-violet-400/20 bg-violet-400/10" : "border-violet-100 bg-violet-50"}`}>
+                  <div className="flex items-end justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-widest text-violet-500">Progreso en este negocio</p><p className={`mt-1 text-xs font-bold ${modoOscuro ? "text-slate-300" : "text-slate-600"}`}>{cuponMetaDisponible ? "¡Tu beneficio está listo!" : "Cada visita te acerca al beneficio"}</p></div><strong className="text-lg text-violet-500">{progresoCupon.actual}/{cuponSeleccionado.visitasMeta}</strong></div>
+                  <div className={`mt-3 h-2 overflow-hidden rounded-full ${modoOscuro ? "bg-white/10" : "bg-violet-200/50"}`}><div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 transition-all duration-700" style={{ width: `${progresoCupon.porcentaje}%` }}></div></div>
+                </div>
+              )}
+
+              <div>
+                <p className={`text-[9px] font-black uppercase tracking-[.2em] ${modoOscuro ? "text-cyan-300" : "text-cyan-700"}`}>Cómo utilizarlo</p>
+                <ol className="mt-3 space-y-3">
+                  {["Acude al establecimiento durante la vigencia.", "Menciona el beneficio antes de pagar.", "Muestra tu QR para que el negocio confirme el canje."].map((paso, index) => (
+                    <li key={paso} className="flex items-center gap-3 text-xs font-bold"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-cyan-500 text-[10px] font-black text-white">{index + 1}</span><span className={modoOscuro ? "text-slate-300" : "text-slate-600"}>{paso}</span></li>
+                  ))}
+                </ol>
+              </div>
+
+              <div className={`rounded-2xl border p-4 ${modoOscuro ? "border-white/10 bg-[#080A12]" : "border-slate-100 bg-slate-50"}`}>
+                <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Sucursal donde aplica</p>
+                <p className="mt-1 text-sm font-black">📍 {cuponSeleccionado.direccion || negocioCupon?.nombreComercial}</p>
+              </div>
+
+              <div className={`grid gap-3 ${telefonoCupon ? "grid-cols-2" : "grid-cols-1"}`}>
+                <a href={mapsCuponUrl} target="_blank" rel="noopener noreferrer" className={`rounded-2xl border py-3.5 text-center text-[9px] font-black uppercase tracking-widest transition active:scale-[.98] ${modoOscuro ? "border-white/10 bg-white/5 text-white" : "border-slate-200 bg-white text-slate-700"}`}>🧭 Cómo llegar</a>
+                {telefonoCupon && <a href={`https://wa.me/52${telefonoCupon}`} target="_blank" rel="noopener noreferrer" className="rounded-2xl bg-[#25D366] py-3.5 text-center text-[9px] font-black uppercase tracking-widest text-white transition active:scale-[.98]">💬 Preguntar</a>}
+              </div>
+
+              <button disabled={!cuponCanjeable} onClick={() => setQrAmpliado(true)} className={`w-full rounded-2xl py-4.5 text-[10px] font-black uppercase tracking-[.14em] shadow-xl transition active:scale-[.98] ${cuponCanjeable ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-violet-900/25" : modoOscuro ? "cursor-not-allowed bg-slate-800 text-slate-500" : "cursor-not-allowed bg-slate-200 text-slate-500"}`}>
+                {cuponYaCanjeado ? "Cupón ya utilizado" : cuponCanjeable ? "Mostrar QR para canjear" : "Beneficio no disponible todavía"}
+              </button>
+              <p className="text-center text-[9px] font-medium leading-4 text-slate-400">Abrir esta pantalla no consume el cupón. El canje se registra únicamente cuando el negocio escanea y confirma.</p>
+            </div>
+          </section>
+        </div>
+      )}
+
       {/* MODAL QR AMPLIADO */}
       {qrAmpliado && (
-        <div className="fixed inset-0 z-[200] bg-[#080A12]/90 backdrop-blur-xl flex flex-col items-center justify-center p-6 animate-fade-in" onClick={() => setQrAmpliado(false)}>
+        <div className="fixed inset-0 z-[220] bg-[#080A12]/90 backdrop-blur-xl flex flex-col items-center justify-center p-6 animate-fade-in" onClick={() => setQrAmpliado(false)}>
           <div className={`p-8 rounded-[3rem] shadow-2xl flex flex-col items-center relative w-full max-w-sm animate-slide-up ${modoOscuro ? "bg-[#161B2C] border border-white/10" : "bg-white"}`} onClick={e => e.stopPropagation()}>
-            <h3 className={`text-sm font-black mb-6 uppercase tracking-[0.2em] ${modoOscuro ? "text-white" : "text-slate-900"}`}>Escáner de Beneficio</h3>
+            <p className="mb-2 text-[9px] font-black uppercase tracking-[.2em] text-violet-500">{cuponSeleccionado ? cuponSeleccionado.nombreNegocio : "Tarjeta Joven Elota"}</p>
+            <h3 className={`text-center text-lg font-black mb-2 ${modoOscuro ? "text-white" : "text-slate-900"}`}>{cuponSeleccionado ? cuponSeleccionado.titulo : "Mi tarjeta digital"}</h3>
+            <p className={`mb-5 text-center text-xs font-medium ${modoOscuro ? "text-slate-400" : "text-slate-500"}`}>{cuponSeleccionado ? "Muestra este código al personal para seleccionar y confirmar el beneficio." : "Muestra este código en un negocio aliado."}</p>
             <div className="bg-white p-4 rounded-[2rem] shadow-[0_0_60px_rgba(124,58,237,0.25)] border-2 border-violet-100 mb-8">
-              <QRCodeCanvas id="qr-joven" value={datosJoven.codigoUnicoQR} size={240} level="M" marginSize={4} />
+              <QRCodeCanvas id="qr-joven" value={qrCanjeValue} size={240} level="M" marginSize={4} />
             </div>
-            <p className={`mb-6 break-all text-center font-mono text-[10px] font-black tracking-wider ${modoOscuro ? "text-slate-300" : "text-slate-600"}`}>{datosJoven.codigoUnicoQR}</p>
             <div className="flex w-full gap-3">
-              <button onClick={() => setQrAmpliado(false)} className={`flex-1 font-black py-4.5 rounded-2xl text-[10px] uppercase tracking-widest transition-colors ${modoOscuro ? "bg-[#111625] text-slate-400" : "bg-slate-100 text-slate-500"}`}>Cerrar</button>
+              <button onClick={() => setQrAmpliado(false)} className={`flex-1 font-black py-4.5 rounded-2xl text-[10px] uppercase tracking-widest transition-colors ${modoOscuro ? "bg-[#111625] text-slate-400" : "bg-slate-100 text-slate-500"}`}>{cuponSeleccionado ? "Volver" : "Cerrar"}</button>
               <button onClick={descargarQR} className="flex-1 bg-violet-600 text-white font-black py-4.5 rounded-2xl text-[10px] uppercase tracking-widest shadow-lg shadow-violet-900/30">Guardar QR</button>
             </div>
           </div>

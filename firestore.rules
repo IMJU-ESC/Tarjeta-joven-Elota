@@ -24,25 +24,22 @@ service cloud.firestore {
     match /jovenes/{uid} {
       allow get: if administrador() || (autenticado() && request.auth.uid == uid);
       allow list: if administrador();
-      allow create, delete: if administrador();
-      allow update: if administrador() || (
-        autenticado() && request.auth.uid == uid
-        && request.resource.data.authUid == resource.data.authUid
-        && request.resource.data.correo == resource.data.correo
-        && request.resource.data.codigoUnicoQR == resource.data.codigoUnicoQR
-        && request.resource.data.estatus == "Activo"
-      );
+      allow create, update, delete: if administrador();
     }
 
     match /negocios/{uid} {
-      allow read: if administrador() || resource.data.estatus == "Activo"
-        || (autenticado() && request.auth.uid == uid);
+      // El directorio público se entrega desde /api/directorio con campos
+      // permitidos. Los documentos completos contienen datos internos.
+      allow get: if administrador() || (autenticado() && request.auth.uid == uid);
+      allow list: if administrador();
       allow create, delete: if administrador();
       allow update: if administrador() || (
         autenticado() && request.auth.uid == uid
-        && request.resource.data.authUid == resource.data.authUid
-        && request.resource.data.correo == resource.data.correo
-        && request.resource.data.estatus == "Activo"
+        && resource.data.estatus == "Activo"
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "nombreComercial", "giro", "horario", "telefono", "lat", "lng",
+          "logo", "logoPath", "menuImagen"
+        ])
       );
     }
 
@@ -72,23 +69,50 @@ service cloud.firestore {
     match /promociones/{publicacionId} {
       allow read: if resource.data.estatus == "Activa" || administrador()
         || (negocioActivo() && resource.data.ownerUid == request.auth.uid);
-      allow create: if negocioActivo() && request.resource.data.ownerUid == request.auth.uid;
-      allow update, delete: if administrador()
+      allow create: if negocioActivo()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.estatus == "Activa";
+      allow update: if administrador() || (
+        negocioActivo()
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.estatus == "Activa"
+      );
+      allow delete: if administrador()
         || (negocioActivo() && resource.data.ownerUid == request.auth.uid);
     }
 
     match /empleos/{publicacionId} {
       allow read: if resource.data.estatus == "Activa" || administrador()
         || (negocioActivo() && resource.data.ownerUid == request.auth.uid);
-      allow create: if negocioActivo() && request.resource.data.ownerUid == request.auth.uid;
-      allow update, delete: if administrador()
+      allow create: if negocioActivo()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.estatus == "Activa";
+      allow update: if administrador() || (
+        negocioActivo()
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.estatus == "Activa"
+      );
+      allow delete: if administrador()
         || (negocioActivo() && resource.data.ownerUid == request.auth.uid);
     }
 
-    match /sistema/{documentoId} {
+    match /sistema/estado {
       allow read: if true;
-      allow write: if administrador() || negocioActivo();
+      allow create: if administrador() || (
+        negocioActivo()
+        && request.resource.data.keys().hasOnly(["ultimaActualizacion"])
+        && request.resource.data.ultimaActualizacion is number
+      );
+      allow update: if administrador() || (
+        negocioActivo()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["ultimaActualizacion"])
+        && request.resource.data.ultimaActualizacion is number
+      );
     }
+
+    match /sistema/{documentoId} { allow read, write: if false; }
 
     match /{documento=**} { allow read, write: if false; }
   }

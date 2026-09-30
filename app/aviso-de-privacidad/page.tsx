@@ -97,10 +97,23 @@ export default function AvisoDePrivacidad() {
             <p>
               El historial comercial utiliza un identificador interno y conserva únicamente el negocio, la fecha y el beneficio aplicado; los reportes del negocio no muestran el nombre ni datos demográficos del joven. No se autoriza al negocio a copiar, reutilizar o transferir la información mostrada. Fuera de esta validación limitada, no se compartirán datos con empresas privadas, salvo requerimiento debidamente fundado de una autoridad competente.
             </p>
+            <p className="mt-4">
+              El directorio público de comercios muestra exclusivamente los datos necesarios para localizar y reconocer a un aliado: nombre comercial, giro, horario, teléfono de contacto, ubicación aproximada, logotipo y, cuando exista, menú o material promocional. El correo de acceso, identificadores internos y evidencias de validación no forman parte del directorio público.
+            </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-black text-[#0F766E] mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">7. Ejercicio de Derechos ARCO</h2>
+            <h2 className="text-xl font-black text-[#0F766E] mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">7. Uso de Cupones y Registro de Visitas</h2>
+            <p className="mb-4">
+              Consultar un cupón, abrir sus indicaciones o mostrar su código QR <strong>no lo consume automáticamente</strong>. El beneficio sólo se registra cuando un Negocio Aliado con sesión activa escanea el código y confirma la operación. Antes de mostrarlo, la plataforma informa la vigencia, los días aplicables, el establecimiento, su ubicación, las condiciones publicadas y si el beneficio es de uso único o requiere visitas previas.
+            </p>
+            <p>
+              Para prevenir duplicidades y elaborar estadísticas disociadas se conserva un registro técnico de la fecha, el comercio, el identificador interno de la tarjeta y el beneficio aplicado. Los negocios reciben únicamente resultados agregados o identificadores anonimizados para conocer el uso de sus promociones.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-black text-[#0F766E] mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">8. Ejercicio de Derechos ARCO</h2>
             <p className="mb-4">
               Usted tiene derecho inalienable a conocer qué datos personales tenemos registrados (Acceso); solicitar la corrección de su información en caso de ser inexacta o desactualizada (Rectificación); exigir la eliminación total de su perfil y datos de nuestros servidores (Cancelación); así como oponerse al uso de sus datos para fines específicos (Oposición).
             </p>
@@ -110,7 +123,7 @@ export default function AvisoDePrivacidad() {
           </section>
 
           <section>
-            <h2 className="text-xl font-black text-[#0F766E] mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">8. Aceptación Informada</h2>
+            <h2 className="text-xl font-black text-[#0F766E] mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">9. Aceptación Informada</h2>
             <p>
               La creación de una cuenta, la navegación en el sistema y/o el uso de la credencial digital (tanto en su versión para beneficiarios como en el panel administrativo para comercios) constituye la aceptación expresa, consciente, libre de coacción y con pleno conocimiento legal de los presentes Términos, Condiciones y de este Aviso de Privacidad Integral.
             </p>

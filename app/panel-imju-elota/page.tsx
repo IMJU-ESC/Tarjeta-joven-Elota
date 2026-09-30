@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Camera, type CameraHandle } from "@/components/NativeCamera";
-import { collection, addDoc, query, where, getDocs, getDoc, deleteDoc, doc, updateDoc, setDoc } from "firebase/firestore"; 
+import { collection, addDoc, query, where, getDocs, getDoc, deleteDoc, doc, updateDoc, setDoc, limit } from "firebase/firestore"; 
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
 import { ref, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
 import { db, auth, authPersistenceReady, storage } from "../../firebase";
@@ -207,7 +207,7 @@ export default function PanelAdministrativo() {
   const cargarDirectorio = async (rolUsuario: string) => {
     setCargando(true);
     try {
-      const queryJovenes = await getDocs(collection(db, "jovenes"));
+      const queryJovenes = await getDocs(query(collection(db, "jovenes"), limit(500)));
       const tempJovenes: any[] = [];
       const tempSolicitudes: any[] = [];
       queryJovenes.forEach((doc) => {
@@ -219,7 +219,7 @@ export default function PanelAdministrativo() {
       tempSolicitudes.sort((a, b) => (a.nombreCompleto || "").localeCompare(b.nombreCompleto || ""));
       setListaJovenes(tempJovenes); setSolicitudes(tempSolicitudes);
 
-      const queryNegocios = await getDocs(collection(db, "negocios"));
+      const queryNegocios = await getDocs(query(collection(db, "negocios"), limit(300)));
       const tempNegocios: any[] = [];
       const tempSolNegocios: any[] = [];
       queryNegocios.forEach((doc) => {
@@ -230,24 +230,24 @@ export default function PanelAdministrativo() {
       setListaNegocios(tempNegocios);
       setSolicitudesNegocios(tempSolNegocios);
 
-      const queryVisitas = await getDocs(collection(db, "visitas"));
+      const queryVisitas = await getDocs(query(collection(db, "visitas"), limit(1000)));
       const tempV: any[] = [];
       queryVisitas.forEach(doc => tempV.push({ idFirebase: doc.id, ...doc.data() }));
       tempV.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
       setVisitas(tempV);
 
-      const queryAnuncios = await getDocs(collection(db, "anuncios"));
+      const queryAnuncios = await getDocs(query(collection(db, "anuncios"), limit(100)));
       const tempA: any[] = [];
       queryAnuncios.forEach(doc => tempA.push({ idFirebase: doc.id, ...doc.data() }));
       tempA.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
       setAnuncios(tempA);
 
-      const queryPromos = await getDocs(collection(db, "promociones"));
+      const queryPromos = await getDocs(query(collection(db, "promociones"), limit(300)));
       const tempPromos: any[] = [];
       queryPromos.forEach(doc => tempPromos.push({ idFirebase: doc.id, ...doc.data() }));
       setListaPromos(tempPromos);
 
-      const queryEmpleos = await getDocs(collection(db, "empleos"));
+      const queryEmpleos = await getDocs(query(collection(db, "empleos"), limit(300)));
       const tempEmpleos: any[] = [];
       queryEmpleos.forEach(doc => tempEmpleos.push({ idFirebase: doc.id, ...doc.data() }));
       setListaEmpleos(tempEmpleos);
@@ -622,14 +622,14 @@ export default function PanelAdministrativo() {
         csvContent += `${limpiar(j.nombreCompleto)},${limpiar(j.fechaNacimiento || 'N/A')},${limpiar(edadActual.toString())},${limpiar(generoExcel)},${limpiar(j.ocupacion)},${limpiar(j.localidad)},${limpiar(j.correo)},${limpiar(j.codigoUnicoQR)}\n`; 
       });
     } else if (tipo === "negocios") {
-      nombreArchivo = "Directorio_Negocios.csv"; csvContent += "Comercio,Giro,Correo,Contraseña\n";
+      nombreArchivo = "Directorio_Negocios.csv"; csvContent += "Comercio,Giro,Correo\n";
       negociosFiltrados.forEach(n => { csvContent += `${limpiar(n.nombreComercial)},${limpiar(n.giro)},${limpiar(n.correo)}\n`; });
     } else if (tipo === "visitas") {
-      nombreArchivo = `Reporte_Visitas_${mesSeleccionado}.csv`; csvContent += "Fecha,Joven,Género,Negocio,Promoción\n";
+      nombreArchivo = `Reporte_Visitas_${mesSeleccionado}.csv`; csvContent += "Fecha,Identificador anónimo,Negocio,Promoción\n";
       visitasFiltradas.forEach(v => { 
          const f = new Date(v.fecha).toLocaleString("es-MX"); 
-         const gen = v.generoJoven || "No especificado";
-         csvContent += `${limpiar(f)},${limpiar(v.nombreJoven)},${limpiar(gen)},${limpiar(v.nombreNegocio)},${limpiar(v.nombrePromo)}\n`; 
+         const anonimo = String(v.youthUid || v.idJoven || "registro").slice(0, 8);
+         csvContent += `${limpiar(f)},${limpiar(anonimo)},${limpiar(v.nombreNegocio)},${limpiar(v.nombrePromo)}\n`; 
       });
     }
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -1044,7 +1044,7 @@ export default function PanelAdministrativo() {
                       <tr className="border-b-2 border-slate-100">
                         <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Fecha y Hora</th>
                         <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Negocio</th>
-                        <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Joven Beneficiado</th>
+                        <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Identificador anónimo</th>
                         <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Promoción</th>
                       </tr>
                     </thead>
@@ -1056,7 +1056,7 @@ export default function PanelAdministrativo() {
                           <tr key={v.idFirebase} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
                             <td className="py-5 pl-2 text-[11px] font-black text-slate-500 uppercase">{new Date(v.fecha).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute:'2-digit' })}</td>
                             <td className="py-5 font-black text-emerald-600 text-sm">{v.nombreNegocio}</td>
-                            <td className="py-5 text-sm font-black text-slate-800">{v.nombreJoven}</td>
+                            <td className="py-5 font-mono text-xs font-black text-slate-500">{String(v.youthUid || v.idJoven || "registro").slice(0, 8)}</td>
                             <td className="py-5"><span className="bg-[#0F766E]/10 text-[#0F766E] px-4 py-2 rounded-[1rem] text-[9px] font-black uppercase tracking-widest border border-teal-100/50">{v.nombrePromo}</span></td>
                           </tr>
                         ))

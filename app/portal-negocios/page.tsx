@@ -216,7 +216,17 @@ export default function PortalNegocios() {
 
   const procesarQR = async (codigoQR: string) => {
     if (buscando) return; 
-    const codigoLimpio = codigoQR.trim().toUpperCase();
+    const lectura = codigoQR.trim();
+    let codigoTarjeta = lectura;
+    let promoSolicitada = "";
+    if (lectura.startsWith("TJE1|")) {
+      const [, codigoIncluido, promoIncluida] = lectura.split("|");
+      if (codigoIncluido && promoIncluida) {
+        codigoTarjeta = codigoIncluido;
+        promoSolicitada = promoIncluida;
+      }
+    }
+    const codigoLimpio = codigoTarjeta.trim().toUpperCase();
     if (!codigoLimpio) return;
     setBuscando(true);
     setMensajeEscaner("Validando tarjeta…");
@@ -229,7 +239,7 @@ export default function PortalNegocios() {
       const result = await ejecutarTarjetaSegura({ accion: "validar", codigoQR: codigoLimpio });
       audioExito.current?.play().catch(()=>{});
       setJovenEscaneado(result.tarjeta);
-      setPromoAplicada("");
+      setPromoAplicada(listaPromos.some((promo) => promo.idFirebase === promoSolicitada) ? promoSolicitada : "");
       setModoEscaner(false);
     } catch (error: any) { 
       audioError.current?.play().catch(()=>{}); 
@@ -322,6 +332,22 @@ export default function PortalNegocios() {
       }
 
       if (bloqueadaPorDia) { audioError.current?.play().catch(()=>{}); alert(`❌ RECHAZADA:\nPromo válida solo: ${p.diasValidos}. Hoy es ${hoyTexto}.`); setRegistrandoVisita(false); return; }
+      if (p.tipo === "Frecuente") {
+        const meta = Number(p.visitasMeta);
+        const visitasDelJoven = historialVisitas.filter(v => {
+          const mismoJoven = (v.youthUid || v.idJoven) === jovenEscaneado.idFirebase;
+          const dias = (Date.now() - new Date(v.fecha).getTime()) / 86_400_000;
+          return mismoJoven && dias >= 0 && dias <= 90;
+        });
+        const canjesPrevios = visitasDelJoven.filter(v => v.idPromo === p.idFirebase).length;
+        const siguienteMeta = meta * (canjesPrevios + 1);
+        if (Number.isFinite(meta) && meta > 0 && visitasDelJoven.length < siguienteMeta) {
+          audioError.current?.play().catch(()=>{});
+          alert(`🔒 BENEFICIO EN PROGRESO:\nFaltan ${siguienteMeta - visitasDelJoven.length} visita(s) para desbloquearlo.`);
+          setRegistrandoVisita(false);
+          return;
+        }
+      }
       if (p.tipo === "Directa" && p.usoUnico) {
         if (historialVisitas.some(v => (v.youthUid || v.idJoven) === jovenEscaneado.idFirebase && v.idPromo === p.idFirebase)) {
           audioError.current?.play().catch(()=>{}); alert("❌ RECHAZADA:\nEste joven ya usó este cupón de Único Uso."); setRegistrandoVisita(false); return;
@@ -580,9 +606,6 @@ export default function PortalNegocios() {
 
       {modalRutaAliado && (
         <div className="fixed inset-0 z-[400] grid place-items-center overflow-hidden bg-slate-950/85 p-5 backdrop-blur-md" onClick={() => setModalRutaAliado(false)}>
-          {["#34d399", "#22d3ee", "#f4c425", "#64748B", "#a78bfa", "#f70476"].map((color, index) => (
-            <span key={color} className="celebration-spark top-0" style={{ left: `${14 + index * 14}%`, background: color, animationDelay: `${index * .18}s`, ["--spark-x" as string]: `${index % 2 ? 35 : -30}px` }}></span>
-          ))}
           <section className="motion-enter relative w-full max-w-sm overflow-hidden rounded-[2.7rem] border border-white/10 bg-gradient-to-br from-emerald-950 to-[#080d18] p-7 text-center text-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="brand-orb absolute -right-16 -top-16 h-48 w-48 rounded-full bg-emerald-400/20 blur-3xl"></div>
             <div className="relative mx-auto grid h-28 w-28 place-items-center rounded-[2.3rem] bg-gradient-to-br from-emerald-400 via-cyan-500 to-blue-600 text-6xl shadow-xl shadow-emerald-950/40">🏆</div>
@@ -778,6 +801,7 @@ export default function PortalNegocios() {
                         const promoNum = jerarquiaPromos[p.nivelRequerido as keyof typeof jerarquiaPromos] || 1;
                         let bloqueadaPorNivel = promoNum > jovenEscaneado.nivelUserNum;
                         let bloqueadaPorCumple = p.tipo === "Cumpleaños" && !jovenEscaneado.esCumple;
+                        const bloqueadaPorVencimiento = Boolean(p.fechaVencimiento && p.fechaVencimiento < new Date().toISOString().slice(0, 10));
 
                         const diasSemana = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
                         const hoyTexto = diasSemana[new Date().getDay()];
@@ -791,7 +815,18 @@ export default function PortalNegocios() {
                           else if (p.diasValidos.startsWith("Solo ") && p.diasValidos !== `Solo ${hoyTexto}`) { bloqueadaPorDia = true; mensajeDia = p.diasValidos; }
                         }
 
-                        const bloqueada = bloqueadaPorNivel || bloqueadaPorDia || bloqueadaPorCumple;
+                        const visitasRecientesJoven = historialVisitas.filter((visita) => {
+                          const mismoJoven = (visita.youthUid || visita.idJoven) === jovenEscaneado.idFirebase;
+                          const dias = (Date.now() - new Date(visita.fecha).getTime()) / 86_400_000;
+                          return mismoJoven && dias >= 0 && dias <= 90;
+                        });
+                        const metaFrecuente = Number(p.visitasMeta);
+                        const canjesFrecuentes = visitasRecientesJoven.filter((visita) => visita.idPromo === p.idFirebase).length;
+                        const faltanFrecuencia = p.tipo === "Frecuente" && Number.isFinite(metaFrecuente) && metaFrecuente > 0
+                          ? Math.max(0, (metaFrecuente * (canjesFrecuentes + 1)) - visitasRecientesJoven.length)
+                          : 0;
+                        const bloqueadaPorFrecuencia = faltanFrecuencia > 0;
+                        const bloqueada = bloqueadaPorNivel || bloqueadaPorDia || bloqueadaPorCumple || bloqueadaPorVencimiento || bloqueadaPorFrecuencia;
                         const isSelected = promoAplicada === p.idFirebase;
                         
                         const visitasRequeridas = p.nivelRequerido === 'Black' ? 40 : 15;
@@ -804,6 +839,8 @@ export default function PortalNegocios() {
                               if(bloqueadaPorNivel) { audioError.current?.play().catch(()=>{}); alert(`🔒 PROMOCIÓN BLOQUEADA:\nCliente debe ser Nivel ${p.nivelRequerido}.\nLe faltan ${visitasFaltantes} visitas.`); } 
                               else if (bloqueadaPorCumple) { audioError.current?.play().catch(()=>{}); alert(`🔒 BLOQUEO CUMPLEAÑERO:\nExclusiva para el día del cumpleaños.`); } 
                               else if (bloqueadaPorDia) { audioError.current?.play().catch(()=>{}); alert(`🔒 BLOQUEO DE DÍA:\nRegla: ${p.diasValidos}`); } 
+                              else if (bloqueadaPorVencimiento) { audioError.current?.play().catch(()=>{}); alert("🔒 PROMOCIÓN VENCIDA:\nEste beneficio ya no está vigente."); }
+                              else if (bloqueadaPorFrecuencia) { audioError.current?.play().catch(()=>{}); alert(`🔒 BENEFICIO EN PROGRESO:\nFaltan ${faltanFrecuencia} visita(s).`); }
                               else { setPromoAplicada(p.idFirebase); }
                             }}
                             className={`p-4 rounded-2xl border-2 transition-all flex flex-col gap-2 relative overflow-hidden ${bloqueada ? "border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 opacity-70 cursor-not-allowed" : isSelected ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 shadow-md cursor-pointer" : "border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-emerald-200 dark:hover:border-emerald-700 cursor-pointer"}`}
@@ -821,6 +858,10 @@ export default function PortalNegocios() {
                                  <span className="text-[8px] font-black px-2 py-1 rounded uppercase tracking-widest bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-400">Hoy no aplica ({mensajeDia})</span>
                               ) : bloqueadaPorCumple ? (
                                  <span className="text-[8px] font-black px-2 py-1 rounded uppercase tracking-widest bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-400">No es Cumpleañero</span>
+                              ) : bloqueadaPorVencimiento ? (
+                                 <span className="text-[8px] font-black px-2 py-1 rounded uppercase tracking-widest bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400">Promoción vencida</span>
+                              ) : bloqueadaPorFrecuencia ? (
+                                 <span className="text-[8px] font-black px-2 py-1 rounded uppercase tracking-widest bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-400">Faltan {faltanFrecuencia} visitas</span>
                               ) : (
                                 <>
                                   <span className={`text-[8px] font-black px-2 py-1 rounded uppercase tracking-widest ${p.nivelRequerido === 'Black' ? 'bg-slate-900 text-fuchsia-400' : p.nivelRequerido === 'Oro' ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400' : 'bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'}`}>
@@ -1190,7 +1231,7 @@ export default function PortalNegocios() {
                 {tipoPromo === "Frecuente" && <input type="number" value={visitasRequeridas} onChange={(e) => setVisitasRequeridas(e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#0F766E]/10 transition-all shadow-sm" placeholder="Meta de visitas (Ej. 5)" required />}
                 
                 <input type="text" value={titulo} onChange={(e) => setTitulo(e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#0F766E]/10 transition-all shadow-sm" placeholder="Título principal" required />
-                <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#0F766E]/10 transition-all h-32 resize-none shadow-sm" placeholder="Descripción detallada..." required></textarea>
+                <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#0F766E]/10 transition-all h-32 resize-none shadow-sm" placeholder={creandoModal === "promo" ? "Explica el beneficio y sus condiciones: monto mínimo, productos participantes o restricciones." : "Descripción detallada de la vacante..."} required></textarea>
                 <input type="text" value={direccion} onChange={(e) => setDireccion(e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-[#0F766E]/10 transition-all shadow-sm" placeholder="📍 Dirección o Sucursal donde aplica" required />
                 
                 {creandoModal === "empleo" && (
@@ -1213,7 +1254,7 @@ export default function PortalNegocios() {
                     </div>
                     <div>
                       <label className="block text-[9px] font-black uppercase tracking-widest mb-1.5 text-slate-400 dark:text-slate-500 pl-2 text-center">Vencimiento</label>
-                      <input type="date" value={fechaVencimiento} onChange={(e) => setFechaVencimiento(e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-4 text-xs font-bold text-slate-500 dark:text-slate-300 outline-none transition-all shadow-sm" />
+                      <input type="date" min={new Date().toISOString().slice(0, 10)} value={fechaVencimiento} onChange={(e) => setFechaVencimiento(e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-4 text-xs font-bold text-slate-500 dark:text-slate-300 outline-none transition-all shadow-sm" />
                     </div>
                   </div>
                 )}
