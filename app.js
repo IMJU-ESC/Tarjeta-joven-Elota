@@ -296,9 +296,9 @@
   function brandPanel() {
     return `<div class="panel-top"><div><h2>Una demo con su propia identidad</h2><p class="small muted">Adapta la presentación al municipio que la está conociendo.</p></div></div><div class="brand-layout"><div class="panel">${brandForm()}</div><div class="brand-preview"><span class="eyebrow muted">Vista previa</span>${card(youth())}<div class="stack spacer">${button('share-brand','Copiar enlace con nombre y colores','link','secondary')}${button('export-brand','Exportar personalización','download','secondary')}<label class="button secondary" style="cursor:pointer">${ico('file')} Importar personalización<input class="sr-only" type="file" data-upload="brandImport" accept="application/json,.json"></label></div><p class="note spacer">Para mostrar los mismos logos a todos los visitantes, incorpora la personalización exportada en <strong>demo-data.js</strong> y publica la demo de ese municipio.</p></div></div>`;
   }
-  function inputField(name,label,type='text',value='',extra='',wide=false) {return `<label class="field ${wide?'wide':''}">${esc(label)}<input class="field-control" name="${name}" type="${type}" value="${esc(value)}" ${extra}></label>`;}
-  function selectField(name,label,values,current,wide=false) {return `<label class="field ${wide?'wide':''}">${esc(label)}<select class="field-control" name="${name}">${values.map(v=>`<option ${v===current?'selected':''}>${esc(v)}</option>`).join('')}</select></label>`;}
-  function textareaField(name,label,value,extra='',wide=true) {return `<label class="field ${wide?'wide':''}">${esc(label)}<textarea class="field-control" name="${name}" ${extra}>${esc(value||'')}</textarea></label>`;}
+  function inputField(name,label,type='text',value='',extra='',wide=false) {return `<div class="field ${wide?'wide':''}"><label for="field-${name}">${esc(label)}</label><input id="field-${name}" class="field-control" name="${name}" type="${type}" value="${esc(value)}" ${extra}></div>`;}
+  function selectField(name,label,values,current,wide=false) {return `<div class="field ${wide?'wide':''}"><label for="field-${name}">${esc(label)}</label><select id="field-${name}" class="field-control" name="${name}">${values.map(v=>`<option ${v===current?'selected':''}>${esc(v)}</option>`).join('')}</select></div>`;}
+  function textareaField(name,label,value,extra='',wide=true) {return `<div class="field ${wide?'wide':''}"><label for="field-${name}">${esc(label)}</label><textarea id="field-${name}" class="field-control" name="${name}" ${extra}>${esc(value||'')}</textarea></div>`;}
   function youthForm(y=null,registration=false) {
     const birth=y?.birth || '', photo=y?.photo || '';
     ui.pendingPhoto=photo;
@@ -644,6 +644,7 @@
     if(key==='admin-tour'){showModal('Del registro al beneficio.','Un recorrido para mostrar al municipio.',`<ol class="how-list"><li><span>1</span><div>Registra un joven de prueba y aprueba su solicitud. Verás su tarjeta con un QR único.</div></li><li><span>2</span><div>Entra al portal de un negocio y publica un beneficio. Aparecerá en la tarjeta del joven.</div></li><li><span>3</span><div>Prueba un cupón, valida la visita y observa cómo cambian el historial, el nivel y los reportes.</div></li></ol><div class="form-actions">${link('/login','Probar registro','plus','primary')}${button('go-requests','Revisar solicitudes','file','secondary')}</div>`);return;}
   }
   document.addEventListener('click',event=>{
+    if(event.target.closest('.skip-link')){event.preventDefault();const main=document.getElementById('main');if(main){main.tabIndex=-1;main.focus();}return;}
     const el=event.target.closest('[data-action]');
     if(el&&!el.disabled){event.preventDefault();Promise.resolve(action(el)).catch(error=>{console.error(error);toast('No se pudo completar esta acción. Intenta de nuevo.');});}
     else if(event.target.closest('a[href^="#/"]'))closeModal();

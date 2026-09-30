@@ -22,6 +22,10 @@ async function main(){
     await visit('/');
     assert.match(await page.title(),/Tarjeta Joven/);
     assert.equal(await page.locator('.experience').count(),3);
+    await page.locator('.skip-link').focus();
+    await page.locator('.skip-link').click();
+    assert.equal(await page.evaluate(()=>document.activeElement.id),'main');
+    assert.equal(new URL(page.url()).hash,'#/');
     await page.screenshot({path:path.join(screenshots,'01-inicio-escritorio.png'),fullPage:true});
     await visit('/tarjeta');
     await page.screenshot({path:path.join(screenshots,'02-tarjeta-escritorio.png'),fullPage:true});
