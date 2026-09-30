@@ -1,67 +1,56 @@
-# Tarjeta Joven Elota
+# Tarjeta Joven · Demo municipal
 
-PWA de IMJU Elota para jóvenes, negocios aliados y administración.
+Versión de demostración comercial basada en los recorridos del sistema entregado. No necesita Firebase, variables de entorno, cuentas ni instalación de dependencias para funcionar.
 
-## Incluido en esta versión
+## Probar la demo
 
-- Firebase Authentication para jóvenes, negocios y administradores.
-- Contraseñas fuera de Firestore y sesiones administradas por Firebase.
-- Registros y aprobaciones procesados desde el servidor con Firebase Admin.
-- Activación y recuperación mediante enlaces personales por correo.
-- QR único con una ficha mínima separada del expediente juvenil.
-- Eliminación automática de documentos y evidencias de validación al aprobar o
-  rechazar, informada expresamente en el aviso de privacidad y los formularios.
-- Reglas restrictivas de Firestore y Storage.
-- Compresión inteligente WebP, redimensionamiento por tipo de imagen, eliminación
-  de metadatos y límites de tamaño tanto en cliente como en servidor.
-- Limpieza de fotografías y logotipos sustituidos o asociados a registros
-  eliminados, para evitar archivos huérfanos en Storage.
-- Interfaz ligera con niveles, progreso, misiones y confirmaciones animadas.
-- Misiones accionables que guían al usuario hacia cada módulo.
-- Lector QR reforzado con cámara trasera, guía animada y permisos seguros.
-- Consulta de visitas limitada al negocio autenticado, sin abrir las reglas.
-- Tipografía juvenil y microanimaciones CSS optimizadas.
-- Insignias, celebraciones y metas continuas basadas en visitas reales.
-- Diseño adaptable con dos columnas en escritorio y una en celular.
-- Página personalizada para crear contraseña y correos con logotipos oficiales.
-- Misiones ocultas en paneles opcionales con un indicador compacto de progreso.
-- Notificaciones breves de XP sin saturar la pantalla principal.
-- Persistencia local de sesión al cerrar una pestaña.
-- Respeto a la preferencia de movimiento reducido del dispositivo.
-- Paneles de misiones con capa corregida para mostrarse sobre cualquier tarjeta.
-- Identidad visual neutra con gris pizarra, verde petróleo e índigo tenue.
-- Logotipos oficiales conservados como marcas de agua discretas.
-- Menos elementos decorativos repetidos para mantener rapidez en celulares.
-- Estilos críticos integrados para conservar tamaños y animaciones en Vercel.
-- Control preventivo del límite de carga de Vercel y PDFs de hasta 1.5 MB.
-- Diagnóstico claro de configuración de Firebase Admin durante el registro.
+Abre `index.html` o ejecuta `npm run dev` y visita `http://localhost:3000`. Para probar la cámara, usa HTTPS o localhost. Toda la información es ficticia.
 
-## Primer inicio
+Desde el inicio puedes entrar como joven, negocio o administración. Usa el selector de perfil para probar diferentes tarjetas y aliados.
 
-1. Ejecuta `npm install`.
-2. Copia `.env.example` como `.env.local`.
-3. Completa Firebase Web, Firebase Admin y Gmail.
-4. Publica `firestore.rules` y `storage.rules`.
-5. Ejecuta `npm run build` y después `npm run dev`.
+### Recorrido recomendado para una presentación
 
-Consulta `INSTRUCCIONES-ACTUALIZACION.txt` para el proceso completo.
+1. **Personalizar**: cambia municipio, nombre del programa, colores y logos.
+2. **Registro joven**: crea una solicitud con datos ficticios. En administración, apruébala y abre la tarjeta. Su QR es único.
+3. **Negocio**: publica una promoción. Se mostrará en la tarjeta del joven.
+4. **Usar cupón**: consulta dirección, horario, vigencia, condiciones y pasos; después elige «Probar validación».
+5. **Validación**: confirma el beneficio en el negocio. La visita actualiza historial, nivel y reportes.
+6. **Empleos**: publica una vacante, envía interés desde la tarjeta y revisa interesados en el negocio.
+7. **Administración**: prueba solicitudes, altas, edición, suspensión, moderación, avisos y exportación CSV para Excel.
 
-## Rutas
+Niveles: Clásica con 0–2 visitas, Plata con 3–5 y Oro con 6 o más. Los cupones verifican vigencia, días, nivel, estado de tarjeta y negocio y uso único. Abrir un cupón no registra una visita.
 
-- `/login`: acceso y registro juvenil.
-- `/tarjeta`: tarjeta, QR, beneficios, empleos y progreso.
-- `/login-negocio`: acceso y solicitud de negocios.
-- `/portal-negocios`: escáner, publicaciones y métricas.
-- `/directorio`: directorio público de aliados.
-- `/panel-imju-elota`: administración.
+## Publicar en Vercel
 
-## Seguridad
+Sube estos archivos a un repositorio independiente o a una rama exclusiva de demo. Importa ese repositorio como un proyecto **nuevo** de Vercel. La configuración `vercel.json` publica únicamente los archivos estáticos.
 
-Nunca publiques `.env.local`, el JSON de la cuenta de servicio ni la contraseña
-de aplicación de Gmail. Las variables `FIREBASE_ADMIN_*` son privadas y jamás
-deben llevar el prefijo `NEXT_PUBLIC_`.
+No necesita variables de entorno. No importes las credenciales del proyecto original.
 
-Los documentos de identidad y las fotografías de fachada sólo se usan mientras
-se valida una solicitud y se eliminan al aprobarla o rechazarla. Las fotografías
-de perfil y los logotipos se conservan únicamente para los registros aprobados,
-porque son necesarios para la tarjeta digital y el directorio de negocios.
+Para compartirla con compradores, usa un proyecto de demo con acceso público. Los despliegues Preview de un proyecto existente pueden exigir iniciar sesión en Vercel.
+
+## Personalización
+
+El editor guarda los cambios y las imágenes en el navegador. El botón «Copiar enlace con nombre y colores» comparte esos datos en la URL; los logos no viajan en ese enlace.
+
+«Exportar personalización» descarga un JSON con municipio, programa, colores y logos. «Importar personalización», en Identidad municipal, recupera esa configuración.
+
+Para que todos los visitantes vean una misma marca, copia el objeto `brand` del JSON exportado al objeto `defaultBrand` de `demo-data.js` y publica esa demo. La imagen exportada está incluida como dato PNG; no hace falta subir un archivo separado.
+
+## Alcance de la simulación
+
+- Los cambios son locales a cada navegador. No se sincronizan entre dispositivos.
+- Los perfiles iniciales y sus códigos funcionan en cualquier copia de la demo. Un perfil nuevo solo existe en el navegador que lo creó.
+- Los QR son reales. El lector utiliza la cámara y procesa la imagen localmente.
+- Las solicitudes y su revisión son simuladas. No se guardan documentos de identificación reales.
+- Los avisos, cupones, vacantes y resultados se enlazan dentro de la misma demostración.
+- Las vistas de correo y los envíos de interés no envían comunicaciones reales.
+- Direcciones, ubicaciones, negocios, oportunidades y sueldos son ejemplos.
+- Esta demo es una presentación funcional. No es una credencial válida ni una aplicación de producción con autenticación.
+
+## Verificación
+
+`npm run check` revisa la sintaxis; `npm run build` crea una copia estática en `dist/`.
+
+La rama `demo-comercial` puede ejecutar la verificación de navegador incluida en `.github/workflows/verify-demo.yml`. Comprueba registro, aprobación, QR decodificable, uso único, niveles, vacantes, avisos, personalización, persistencia, CSV, reinicio y siete vistas móviles. Playwright se instala únicamente en el proceso de pruebas.
+
+El código de la aplicación no hace solicitudes a Firebase ni a otros servicios. Dependencias de QR y lector incluidas con sus licencias en `vendor/`.
