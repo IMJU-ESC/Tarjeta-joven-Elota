@@ -14,7 +14,7 @@ async function main(){
   page.on('pageerror',error=>errors.push(error.message));
   page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
   page.on('request',request=>{if(!request.url().startsWith(base)&&!request.url().startsWith('data:')&&!request.url().startsWith('blob:'))external.push(request.url());});
-  const visit=async route=>{await page.goto(base+'/#'+route,{waitUntil:'networkidle'});};
+  const visit=async route=>{await page.goto(base+'/#'+route,{waitUntil:'networkidle'});await page.evaluate(async()=>{await Promise.all(document.getAnimations().map(a=>a.finished.catch(()=>{})));});};
   const data=()=>page.evaluate(key=>JSON.parse(localStorage.getItem(key)),key);
   const click=async name=>page.getByRole('button',{name,exact:true}).click();
   const checkpoint=name=>console.log('PASS '+name);
@@ -30,7 +30,8 @@ async function main(){
     await page.setViewportSize({width:390,height:844});
     for(const route of ['/','/tarjeta','/portal-negocios','/panel','/directorio','/login','/login-negocio']){
       await visit(route);
-      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Desbordamiento móvil en '+route);
+      const overflow=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth,elements:[...document.querySelectorAll('*')].filter(e=>{const r=e.getBoundingClientRect();return r.width&&r.right>innerWidth+1}).slice(0,10).map(e=>({tag:e.tagName,class:e.className,width:e.getBoundingClientRect().width}))}));
+      assert.equal(overflow.overflow,false,'Desbordamiento móvil en '+route+': '+JSON.stringify(overflow.elements));
     }
     await visit('/tarjeta');
     await page.screenshot({path:path.join(screenshots,'04-tarjeta-movil.png'),fullPage:true});
