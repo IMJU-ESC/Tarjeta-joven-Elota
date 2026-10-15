@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb, assertAdminEnv } from "@/lib/firebase-admin";
+import { CONSENTIMIENTO_VERSION, DECLARACION_NEUTRALIDAD_VERSION } from "@/lib/politica-programa";
 import { removeStoredFile, saveDataUrl } from "@/lib/server-storage";
 
 export const runtime = "nodejs";
@@ -93,6 +94,12 @@ export async function POST(request: Request) {
     const type = body?.tipo === "negocio" ? "negocio" : body?.tipo === "joven" ? "joven" : "";
     const email = text(body?.correo, 180).toLowerCase();
     if (!type || !emailOk(email)) return NextResponse.json({ error: "Datos de registro no válidos." }, { status: 400 });
+    if (body?.aceptoTerminos !== true) {
+      return NextResponse.json({ error: "Debes aceptar los Términos, Condiciones y Aviso de Privacidad." }, { status: 400 });
+    }
+    if (body?.consentimientoVersion !== CONSENTIMIENTO_VERSION) {
+      return NextResponse.json({ error: "El aviso legal fue actualizado. Recarga la página, revísalo y vuelve a confirmar tu aceptación." }, { status: 409 });
+    }
 
     try {
       await adminAuth.getUserByEmail(email);
@@ -114,6 +121,10 @@ export async function POST(request: Request) {
       if (!name || !gender || age < 12 || age > 29 || !body?.fotoPerfil || !body?.documentoProbatorio) {
         return NextResponse.json({ error: "Completa correctamente los tres pasos del registro." }, { status: 400 });
       }
+      const isMinor = age < 18;
+      if (isMinor && body?.autorizacionTutor !== true) {
+        return NextResponse.json({ error: "El registro de una persona menor requiere autorización de su madre, padre o persona tutora." }, { status: 400 });
+      }
 
       const profile = await saveDataUrl(body.fotoPerfil, "jovenes_perfiles", 300_000);
       createdPaths.push(profile.path);
@@ -131,6 +142,12 @@ export async function POST(request: Request) {
         documentoProbatorioPath: proof.path,
         estatus: "Pendiente",
         fechaRegistro: new Date().toISOString(),
+        aceptoTerminos: true,
+        esMenorAlRegistro: isMinor,
+        autorizacionTutorDeclarada: isMinor,
+        consentimientoVersion: CONSENTIMIENTO_VERSION,
+        consentimientoFecha: new Date().toISOString(),
+        declaracionNeutralidadVersion: DECLARACION_NEUTRALIDAD_VERSION,
       });
     } else {
       const name = text(body?.nombreComercial);
@@ -162,6 +179,9 @@ export async function POST(request: Request) {
         estatus: "Pendiente",
         fechaRegistro: new Date().toISOString(),
         aceptoTerminos: true,
+        consentimientoVersion: CONSENTIMIENTO_VERSION,
+        consentimientoFecha: new Date().toISOString(),
+        declaracionNeutralidadVersion: DECLARACION_NEUTRALIDAD_VERSION,
       });
     }
 

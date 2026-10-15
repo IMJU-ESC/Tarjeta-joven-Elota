@@ -14,11 +14,19 @@ export default function AvisoDePrivacidad() {
           </div>
           <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight mb-2">Términos, Condiciones y Aviso de Privacidad Integral</h1>
           <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Instituto Municipal de la Juventud de Elota</p>
-          <p className="text-xs text-slate-400 mt-2">Última actualización: {new Date().toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })}</p>
+          <p className="text-xs text-slate-400 mt-2">Última actualización: 15 de octubre de 2026</p>
         </div>
 
         {/* CONTENIDO LEGAL */}
         <div className="bg-white rounded-[2.5rem] shadow-xl border border-slate-100 p-8 md:p-12 space-y-8 text-slate-700 leading-relaxed text-[15px] animate-slide-up">
+
+          <section className="rounded-[2rem] border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-cyan-50 p-6 md:p-8">
+            <p className="mb-2 text-[10px] font-black uppercase tracking-[.22em] text-violet-700">Compromiso institucional permanente</p>
+            <h2 className="mb-3 text-2xl font-black tracking-tight text-slate-900">Programa público, gratuito y apartidista</h2>
+            <p className="font-semibold text-slate-700">
+              El registro, la permanencia, la tarjeta, los cupones, las vacantes y cualquier otro beneficio <strong>no están condicionados</strong> a afiliarse, asistir a eventos, difundir contenido, apoyar o votar por partido, candidatura, coalición, persona aspirante o servidora pública alguna. Está prohibido utilizar esta plataforma, sus padrones, códigos QR, estadísticas o comunicaciones con fines de propaganda, proselitismo, promoción personalizada, presión o perfilamiento político-electoral.
+            </p>
+          </section>
           
           <section>
             <h2 className="text-xl font-black text-[#0F766E] mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">1. Identidad, Domicilio y Declaración General</h2>
@@ -32,31 +40,60 @@ export default function AvisoDePrivacidad() {
 
           <section>
             <h2 className="text-xl font-black text-[#0F766E] mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">2. Fundamento Legal</h2>
+            <p className="mb-4">
+              El tratamiento de datos personales se rige por la <strong>Ley General de Protección de Datos Personales en Posesión de Sujetos Obligados</strong>, la legislación aplicable del Estado de Sinaloa y las atribuciones del Instituto Municipal de la Juventud para ejecutar políticas públicas, observando los principios de licitud, finalidad, lealtad, consentimiento, calidad, proporcionalidad, información y responsabilidad.
+            </p>
             <p>
-              El tratamiento de los datos personales, así como el marco de operación de este programa, se realiza con estricto apego y fundamento en los artículos 16, 17, 18, 21, 22, 25, 26 y 65 de la <strong>Ley General de Protección de Datos Personales en Posesión de Sujetos Obligados</strong>, la Ley de Protección de Datos Personales del Estado de Sinaloa, y las facultades inherentes al Instituto Municipal de la Juventud para la ejecución de políticas públicas.
+              La operación y comunicación del programa también observará el artículo 134 de la Constitución Política de los Estados Unidos Mexicanos y las disposiciones electorales aplicables, incluidas las reglas relativas a imparcialidad, propaganda gubernamental, promoción personalizada y uso de programas sociales contenidas en la Ley General de Instituciones y Procedimientos Electorales.
             </p>
           </section>
 
+          <section className="rounded-[2rem] border border-slate-800 bg-slate-950 p-6 text-slate-200 md:p-8">
+            <h2 className="mb-4 border-b border-white/10 pb-2 text-xl font-black uppercase tracking-widest text-cyan-300">3. Neutralidad Política-Electoral y No Condicionamiento</h2>
+            <ul className="list-disc space-y-3 pl-6 font-medium">
+              <li>La Tarjeta Joven Elota no pertenece ni beneficia a partido, candidatura, coalición, persona aspirante o persona servidora pública.</li>
+              <li>Nadie puede solicitar voto, apoyo, afiliación, datos políticos, asistencia a actos, fotografías, publicaciones en redes o cualquier contraprestación para registrar, aprobar, conservar o utilizar la tarjeta y sus beneficios.</li>
+              <li>Los datos personales, padrones, QR, métricas y canales de contacto no podrán utilizarse para segmentación, encuestas, movilización, propaganda o comunicación político-electoral.</li>
+              <li>Los negocios aliados no podrán presentar descuentos, empleos o promociones como recompensa o incentivo electoral ni condicionar su entrega por motivos políticos.</li>
+              <li>Los avisos del sistema deberán ser institucionales, informativos y sin nombres, imágenes, voces, lemas o símbolos que impliquen promoción personalizada o partidista.</li>
+              <li>Durante los periodos electorales, la difusión institucional se ajustará, limitará o suspenderá en los casos y plazos exigidos por la autoridad y la normativa aplicable.</li>
+            </ul>
+            <p className="mt-4 text-sm text-slate-300">El contenido contrario a estas reglas podrá retirarse y la cuenta responsable podrá suspenderse, previa revisión institucional y sin perjuicio de las denuncias o responsabilidades que correspondan.</p>
+          </section>
+
           <section>
-            <h2 className="text-xl font-black text-[#0F766E] mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">3. Datos Recabados y Finalidad (Jóvenes Beneficiarios)</h2>
+            <h2 className="text-xl font-black text-[#0F766E] mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">4. Datos Recabados y Finalidad (Jóvenes Beneficiarios)</h2>
             <p className="mb-4">Para la inscripción al padrón del programa Tarjeta Joven, el IMJU solicitará y someterá a tratamiento los siguientes datos:</p>
             <ul className="list-disc pl-6 mb-4 space-y-2 font-medium">
               <li>Nombre completo.</li>
               <li>Fecha de nacimiento y edad exacta.</li>
-              <li>Género y ocupación actual.</li>
-              <li>Localidad o colonia de residencia.</li>
+              <li>Género y, cuando el canal de alta lo requiera, ocupación actual.</li>
+              <li>Cuando el canal de alta lo requiera, localidad o colonia de residencia.</li>
               <li>Correo electrónico de contacto.</li>
             </ul>
             <div className="bg-stone-50 border-l-4 border-stone-500 p-4 rounded-r-xl mb-4 text-slate-800 text-sm font-medium">
-              <strong>Tratamiento de Fotografía e Identificación:</strong> Se recabará una fotografía del rostro del solicitante y una captura de un documento de identidad oficial (INE, Credencial Escolar, etc.). Estos datos son considerados de carácter sensible y su uso es <strong>estrictamente restrictivo</strong> para corroborar la edad legal de elegibilidad (12 a 29 años), prevenir el fraude por suplantación y emitir la credencial digital personalizada. <u>Bajo ninguna circunstancia</u> se utilizarán para sistemas de reconocimiento facial masivo ni se expondrán en directorios públicos.
+              <strong>Tratamiento de Fotografía e Identificación:</strong> Se recabará una fotografía del rostro del solicitante y una imagen o archivo de un documento idóneo (por ejemplo, INE, acta de nacimiento o credencial escolar). Debido al riesgo que representa su exposición, tendrán manejo restringido y se utilizarán únicamente para corroborar la elegibilidad de 12 a 29 años, prevenir suplantaciones y emitir la credencial digital personalizada. <u>No se usarán</u> para reconocimiento facial automatizado ni se expondrán en directorios públicos.
             </div>
             <p>
               La información recabada servirá para generar un expediente electrónico, llevar un control estadístico (disociado) de impacto demográfico municipal y mantener comunicación sobre convocatorias. No será comercializada, alquilada ni compartida con el sector privado.
             </p>
           </section>
 
+          <section className="rounded-[2rem] border border-violet-200 bg-violet-50/70 p-6 md:p-8">
+            <h2 className="mb-4 border-b border-violet-200 pb-2 text-xl font-black uppercase tracking-widest text-violet-800">5. Registro de Personas Menores de Edad</h2>
+            <p className="mb-4">
+              Las personas de <strong>12 a 17 años</strong> sólo podrán registrarse con el conocimiento y la autorización expresa de su madre, padre o persona tutora. En el formulario se solicitará una declaración específica que confirme que dicha persona revisó este aviso y autorizó el tratamiento de los datos, la fotografía, el documento de validación, la creación de la cuenta y la emisión de la tarjeta digital.
+            </p>
+            <ul className="list-disc space-y-3 pl-6 font-medium">
+              <li>El sistema conserva como evidencia la condición de minoría de edad al registrarse, la confirmación de autorización, la fecha y la versión del aviso aceptado; no solicita datos adicionales del tutor mediante la casilla.</li>
+              <li>El IMJU podrá pedir posteriormente documentación o confirmación adicional para comprobar la representación o autorización, cuando la normativa, la naturaleza del trámite o una situación de riesgo así lo requieran.</li>
+              <li>La madre, el padre o la persona tutora podrá ejercer los derechos que correspondan en representación de la persona menor, acreditando su identidad y representación ante el IMJU.</li>
+              <li>Si no se cuenta con la autorización indicada, no deberá enviarse la solicitud.</li>
+            </ul>
+          </section>
+
           <section className="rounded-[2rem] border border-slate-200 bg-slate-50 p-6 md:p-8">
-            <h2 className="mb-4 border-b border-slate-200 pb-2 text-xl font-black uppercase tracking-widest text-[#0F766E]">4. Conservación y Eliminación de Evidencias de Validación</h2>
+            <h2 className="mb-4 border-b border-slate-200 pb-2 text-xl font-black uppercase tracking-widest text-[#0F766E]">6. Conservación y Eliminación de Evidencias de Validación</h2>
             <p className="mb-4">
               Los documentos de identidad enviados por jóvenes y las fotografías de fachada proporcionadas por los negocios se utilizarán <strong>únicamente para revisar y resolver la solicitud de registro</strong>. Permanecerán en almacenamiento restringido mientras la solicitud tenga el estado de pendiente.
             </p>
@@ -69,7 +106,7 @@ export default function AvisoDePrivacidad() {
           </section>
 
           <section className="bg-teal-50/70 p-6 md:p-8 rounded-[2rem] border border-teal-200 shadow-sm">
-            <h2 className="text-xl font-black text-[#0F766E] mb-4 uppercase tracking-widest border-b border-teal-200 pb-2">5. Blindaje Legal y Deslinde de Responsabilidad (Negocios Aliados)</h2>
+            <h2 className="text-xl font-black text-[#0F766E] mb-4 uppercase tracking-widest border-b border-teal-200 pb-2">7. Obligaciones y Responsabilidad de Negocios Aliados</h2>
             <p className="mb-4 font-bold text-teal-950">
               Al registrarse y hacer uso del "Portal de Negocios", el propietario, administrador o representante legal del establecimiento declara aceptar incondicionalmente las siguientes cláusulas de exención de responsabilidad institucional:
             </p>
@@ -78,19 +115,19 @@ export default function AvisoDePrivacidad() {
                 <strong>Ausencia de Vínculo Comercial:</strong> La plataforma funciona exclusivamente como una cartelera digital. El IMJU y el H. Ayuntamiento de Elota <strong>NO son socios, intermediarios mercantiles, fiadores ni representantes</strong> de las marcas, productos o servicios anunciados.
               </li>
               <li>
-                <strong>Responsabilidad Única frente al Consumidor:</strong> El Negocio Aliado asume la <strong>responsabilidad absoluta, civil, penal y administrativa (incluyendo PROFECO)</strong> de honrar y cumplir cabalmente con los descuentos, vigencias, condiciones y "letras chiquitas" que publique en su perfil. El IMJU se exime de cualquier litigio derivado de publicidad engañosa, mala calidad del servicio o negativa de aplicación de beneficios por parte del comercio.
+                <strong>Responsabilidad frente al consumidor:</strong> El Negocio Aliado es responsable, conforme a la legislación aplicable, de respetar precios, descuentos, vigencias, condiciones y restricciones publicadas. El IMJU no vende los bienes o servicios ni garantiza su calidad; las reclamaciones comerciales deberán dirigirse primero al establecimiento, sin limitar los derechos que correspondan a la persona consumidora.
               </li>
               <li>
                 <strong>Deslinde Laboral (Bolsa de Trabajo):</strong> Toda vacante publicada es gestionada directamente por el empleador privado. El IMJU no funge como agencia de colocación ni asume figura patronal o solidaria. Cualquier conflicto por salarios, seguridad social (IMSS), riesgos de trabajo o demandas obrero-patronales deberá resolverse exclusivamente entre el joven solicitante y la empresa contratante.
               </li>
               <li>
-                <strong>Derecho de Revocación:</strong> Ante el incumplimiento de estas normas, reportes fundamentados por parte de los jóvenes, o conductas que atenten contra la moral pública, la Dirección del IMJU se reserva el derecho unilateral e inapelable de suspender, bloquear o eliminar definitivamente el acceso del negocio a la plataforma.
+                <strong>Revisión y suspensión:</strong> Ante incumplimientos, reportes fundamentados, contenido ilícito o uso político-electoral, el IMJU podrá retirar publicaciones y suspender o cancelar el acceso, documentando la decisión y respetando las garantías y medios de aclaración que resulten aplicables.
               </li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-xl font-black text-[#0F766E] mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">6. Transferencia de Datos Personales</h2>
+            <h2 className="text-xl font-black text-[#0F766E] mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">8. Acceso Limitado y Transferencia de Datos Personales</h2>
             <p className="mb-4">
               Para aplicar un beneficio, un Negocio Aliado con sesión activa podrá escanear el QR y visualizar temporalmente sólo la información mínima necesaria para confirmar la identidad y vigencia de la tarjeta: <strong>nombre, fotografía, nivel y, en su caso, un indicador de cumpleaños</strong>. El negocio no recibe correo, domicilio, género, fecha completa de nacimiento ni documentos de validación.
             </p>
@@ -103,7 +140,7 @@ export default function AvisoDePrivacidad() {
           </section>
 
           <section>
-            <h2 className="text-xl font-black text-[#0F766E] mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">7. Uso de Cupones y Registro de Visitas</h2>
+            <h2 className="text-xl font-black text-[#0F766E] mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">9. Uso de Cupones y Registro de Visitas</h2>
             <p className="mb-4">
               Consultar un cupón, abrir sus indicaciones o mostrar su código QR <strong>no lo consume automáticamente</strong>. El beneficio sólo se registra cuando un Negocio Aliado con sesión activa escanea el código y confirma la operación. Antes de mostrarlo, la plataforma informa la vigencia, los días aplicables, el establecimiento, su ubicación, las condiciones publicadas y si el beneficio es de uso único o requiere visitas previas.
             </p>
@@ -113,7 +150,7 @@ export default function AvisoDePrivacidad() {
           </section>
 
           <section>
-            <h2 className="text-xl font-black text-[#0F766E] mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">8. Ejercicio de Derechos ARCO</h2>
+            <h2 className="text-xl font-black text-[#0F766E] mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">10. Ejercicio de Derechos ARCO</h2>
             <p className="mb-4">
               Usted tiene derecho inalienable a conocer qué datos personales tenemos registrados (Acceso); solicitar la corrección de su información en caso de ser inexacta o desactualizada (Rectificación); exigir la eliminación total de su perfil y datos de nuestros servidores (Cancelación); así como oponerse al uso de sus datos para fines específicos (Oposición).
             </p>
@@ -123,9 +160,15 @@ export default function AvisoDePrivacidad() {
           </section>
 
           <section>
-            <h2 className="text-xl font-black text-[#0F766E] mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">9. Aceptación Informada</h2>
+            <h2 className="text-xl font-black text-[#0F766E] mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">11. Aceptación Informada, Cambios y Contacto</h2>
+            <p className="mb-4">
+              La aceptación se recaba mediante una casilla expresa antes de enviar el registro. El sistema conserva la fecha y la versión aceptada para fines de trazabilidad. La simple visita a una página pública no sustituye esta manifestación de consentimiento.
+            </p>
+            <p className="mb-4">
+              Las modificaciones sustanciales a las finalidades, al tratamiento de datos, a las reglas de neutralidad o al registro de menores se comunicarán por los medios institucionales disponibles y, cuando corresponda, se solicitará una nueva aceptación.
+            </p>
             <p>
-              La creación de una cuenta, la navegación en el sistema y/o el uso de la credencial digital (tanto en su versión para beneficiarios como en el panel administrativo para comercios) constituye la aceptación expresa, consciente, libre de coacción y con pleno conocimiento legal de los presentes Términos, Condiciones y de este Aviso de Privacidad Integral.
+              Para dudas, aclaraciones, reportes de condicionamiento político-electoral o ejercicio de derechos, la persona interesada puede acudir al domicilio señalado en este aviso o escribir a <strong>tarjetaimjuelota@gmail.com</strong>. Ningún reporte afectará el acceso legítimo a los beneficios del programa.
             </p>
           </section>
 

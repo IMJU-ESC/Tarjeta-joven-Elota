@@ -2,11 +2,23 @@ import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb, requireAdmin } from "@/lib/firebase-admin";
 import { publicAppUrl, sendSystemMail } from "@/lib/mailer";
+import { CONSENTIMIENTO_VERSION, DECLARACION_NEUTRALIDAD_VERSION } from "@/lib/politica-programa";
 import { removeStoredFile, saveDataUrl } from "@/lib/server-storage";
 
 export const runtime = "nodejs";
 
 const text = (value: unknown, max = 500) => typeof value === "string" ? value.trim().slice(0, max) : "";
+
+function ageFrom(date: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  if (!year || !month || !day) return -1;
+  const birth = new Date(year, month - 1, day);
+  if (birth.getFullYear() !== year || birth.getMonth() !== month - 1 || birth.getDate() !== day) return -1;
+  const now = new Date();
+  let age = now.getFullYear() - year;
+  if (now.getMonth() < month - 1 || (now.getMonth() === month - 1 && now.getDate() < day)) age--;
+  return age;
+}
 
 async function getOrCreateUser(email: string, name: string) {
   try {
@@ -75,13 +87,31 @@ export async function POST(request: Request) {
         fechaAprobacion: new Date().toISOString(),
       };
       if (type === "joven") {
+        const birthDate = text(payload.fechaNacimiento, 10);
+        const age = ageFrom(birthDate);
+        if (age < 12 || age > 29) return NextResponse.json({ error: "La edad debe estar entre 12 y 29 años." }, { status: 400 });
+        if (payload.consentimientoConfirmado !== true) {
+          return NextResponse.json({ error: "Confirma que la persona titular aceptó el aviso y las condiciones del programa." }, { status: 400 });
+        }
+        const isMinor = age < 18;
+        if (isMinor && payload.autorizacionTutor !== true) {
+          return NextResponse.json({ error: "El alta de una persona menor requiere confirmar la autorización de su madre, padre o persona tutora." }, { status: 400 });
+        }
         Object.assign(active, {
           nombreCompleto: name,
-          fechaNacimiento: text(payload.fechaNacimiento, 10),
+          fechaNacimiento: birthDate,
           localidad: text(payload.localidad, 100),
           genero: text(payload.genero, 40),
           ocupacion: text(payload.ocupacion, 100),
           codigoUnicoQR: `TJE-${crypto.randomBytes(12).toString("hex").toUpperCase()}`,
+          aceptoTerminos: true,
+          esMenorAlRegistro: isMinor,
+          autorizacionTutorDeclarada: isMinor,
+          consentimientoVersion: CONSENTIMIENTO_VERSION,
+          consentimientoFecha: new Date().toISOString(),
+          consentimientoCapturadoPorAdmin: true,
+          consentimientoCapturadoPorUid: actor.uid,
+          declaracionNeutralidadVersion: DECLARACION_NEUTRALIDAD_VERSION,
         });
         if (typeof payload.fotoPerfil === "string" && payload.fotoPerfil.startsWith("data:")) {
           const image = await saveDataUrl(payload.fotoPerfil, "jovenes_perfiles", 300_000);
@@ -129,6 +159,14 @@ export async function POST(request: Request) {
     const data = sourceSnap.data()!;
     const email = text(data.correo, 180).toLowerCase();
     const name = text(type === "joven" ? data.nombreCompleto : data.nombreComercial, 160);
+
+    if (action === "aprobar" && type === "joven") {
+      const age = ageFrom(text(data.fechaNacimiento, 10));
+      if (age < 12 || age > 29) return NextResponse.json({ error: "La edad del registro no cumple el rango de 12 a 29 años." }, { status: 400 });
+      if (age < 18 && data.autorizacionTutorDeclarada !== true) {
+        return NextResponse.json({ error: "No puede aprobarse una persona menor sin autorización de madre, padre o persona tutora." }, { status: 400 });
+      }
+    }
 
     if (action === "rechazar") {
       const reason = text(body?.motivo, 800);

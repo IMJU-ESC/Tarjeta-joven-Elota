@@ -63,7 +63,10 @@ service cloud.firestore {
 
     match /anuncios/{anuncioId} {
       allow read: if true;
-      allow write: if administrador();
+      allow create, update: if administrador()
+        && request.resource.data.declaracionNeutralidad == true
+        && request.resource.data.declaracionNeutralidadVersion == "2026-10-15-neutralidad-electoral-v1";
+      allow delete: if administrador();
     }
 
     match /promociones/{publicacionId} {
@@ -71,13 +74,19 @@ service cloud.firestore {
         || (negocioActivo() && resource.data.ownerUid == request.auth.uid);
       allow create: if negocioActivo()
         && request.resource.data.ownerUid == request.auth.uid
-        && request.resource.data.estatus == "Activa";
-      allow update: if administrador() || (
-        negocioActivo()
-        && resource.data.ownerUid == request.auth.uid
-        && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.estatus == "Activa"
-      );
+        && request.resource.data.declaracionNeutralidad == true
+        && request.resource.data.declaracionNeutralidadVersion == "2026-10-15-neutralidad-electoral-v1";
+      allow update: if (
+        administrador() || (
+          negocioActivo()
+          && resource.data.ownerUid == request.auth.uid
+          && request.resource.data.ownerUid == request.auth.uid
+          && request.resource.data.estatus == "Activa"
+        )
+      )
+        && request.resource.data.declaracionNeutralidad == true
+        && request.resource.data.declaracionNeutralidadVersion == "2026-10-15-neutralidad-electoral-v1";
       allow delete: if administrador()
         || (negocioActivo() && resource.data.ownerUid == request.auth.uid);
     }
@@ -87,13 +96,19 @@ service cloud.firestore {
         || (negocioActivo() && resource.data.ownerUid == request.auth.uid);
       allow create: if negocioActivo()
         && request.resource.data.ownerUid == request.auth.uid
-        && request.resource.data.estatus == "Activa";
-      allow update: if administrador() || (
-        negocioActivo()
-        && resource.data.ownerUid == request.auth.uid
-        && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.estatus == "Activa"
-      );
+        && request.resource.data.declaracionNeutralidad == true
+        && request.resource.data.declaracionNeutralidadVersion == "2026-10-15-neutralidad-electoral-v1";
+      allow update: if (
+        administrador() || (
+          negocioActivo()
+          && resource.data.ownerUid == request.auth.uid
+          && request.resource.data.ownerUid == request.auth.uid
+          && request.resource.data.estatus == "Activa"
+        )
+      )
+        && request.resource.data.declaracionNeutralidad == true
+        && request.resource.data.declaracionNeutralidadVersion == "2026-10-15-neutralidad-electoral-v1";
       allow delete: if administrador()
         || (negocioActivo() && resource.data.ownerUid == request.auth.uid);
     }

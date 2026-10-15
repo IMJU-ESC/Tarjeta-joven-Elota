@@ -8,6 +8,7 @@ import { ref, uploadString, getDownloadURL, deleteObject } from "firebase/storag
 import { db, auth, authPersistenceReady, storage } from "../../firebase";
 import { normalizarCorreo } from "@/lib/credenciales";
 import { compressImageDataUrl, readFileAsDataUrl } from "@/lib/client-image";
+import { CONSENTIMIENTO_VERSION, DECLARACION_NEUTRALIDAD_VERSION } from "@/lib/politica-programa";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -62,6 +63,8 @@ export default function PanelAdministrativo() {
   const [genero, setGenero] = useState("");
   const [ocupacion, setOcupacion] = useState("");
   const [fotoBase64, setFotoBase64] = useState<string | null>(null);
+  const [consentimientoConfirmadoJoven, setConsentimientoConfirmadoJoven] = useState(false);
+  const [autorizacionTutorJoven, setAutorizacionTutorJoven] = useState(false);
 
   const centroElota = { lat: 23.92173, lng: -106.89264 };
   
@@ -80,6 +83,7 @@ export default function PanelAdministrativo() {
   const [tituloAviso, setTituloAviso] = useState("");
   const [mensajeAviso, setMensajeAviso] = useState("");
   const [audienciaAviso, setAudienciaAviso] = useState("Todos");
+  const [aceptaNeutralidadAviso, setAceptaNeutralidadAviso] = useState(false);
 
   const [mostrarCamara, setMostrarCamara] = useState(false);
   const [camaraFrontal, setCamaraFrontal] = useState(false); 
@@ -285,6 +289,10 @@ export default function PanelAdministrativo() {
   };
 
   const aprobarSolicitud = async (joven: any) => {
+    if (calcularEdad(joven.fechaNacimiento) < 18 && !joven.autorizacionTutorDeclarada) {
+      alert("No se puede aprobar este registro: corresponde a una persona menor y no existe una declaración de autorización de madre, padre o persona tutora. Rechaza la solicitud para que pueda registrarse nuevamente con el formato actualizado.");
+      return;
+    }
     if(!window.confirm(`¿Aprobar y generar acceso para ${joven.nombreCompleto}?`)) return;
     setCargando(true);
     try {
@@ -387,6 +395,14 @@ export default function PanelAdministrativo() {
 
     const edadJoven = calcularEdad(fechaNacimiento);
     if (edadJoven < 12 || edadJoven > 29) { alert(`⚠️ BLOQUEO DE SISTEMA:\nEl joven tiene ${edadJoven} años.\nPor reglamento del IMJU, el programa es exclusivo para personas de 12 a 29 años.`); return; }
+    if (!modoEdicion && !consentimientoConfirmadoJoven) {
+      alert("Confirma que la persona titular conoció y aceptó el aviso y las condiciones del programa.");
+      return;
+    }
+    if (!modoEdicion && edadJoven < 18 && !autorizacionTutorJoven) {
+      alert("Para dar de alta a una persona menor debes confirmar la autorización de su madre, padre o persona tutora.");
+      return;
+    }
 
     setCargando(true);
     try {
@@ -423,6 +439,9 @@ export default function PanelAdministrativo() {
           datos: {
             nombreCompleto: nombre.trim(), fechaNacimiento, localidad: localidad.trim(),
             correo: correoNormalizado, genero, ocupacion, fotoPerfil: fotoBase64,
+            consentimientoConfirmado: true,
+            autorizacionTutor: edadJoven < 18 ? autorizacionTutorJoven : false,
+            consentimientoVersion: CONSENTIMIENTO_VERSION,
           },
         });
         alert(result.emailSent
@@ -450,18 +469,21 @@ export default function PanelAdministrativo() {
 
   const iniciarAltaJoven = () => {
     setNombre(""); setFechaNacimiento(""); setLocalidad(""); setCorreo(""); setGenero(""); setOcupacion(""); 
-    setFotoBase64(null); setIdEditando(""); setModoEdicion(false); setModalJoven(true);
+    setFotoBase64(null); setConsentimientoConfirmadoJoven(false); setAutorizacionTutorJoven(false);
+    setIdEditando(""); setModoEdicion(false); setModalJoven(true);
   };
 
   const iniciarEdicionJoven = (j: any) => {
     setNombre(j.nombreCompleto); setFechaNacimiento(j.fechaNacimiento || ""); setLocalidad(j.localidad);
     setCorreo(j.correo); setGenero(j.genero || ""); setOcupacion(j.ocupacion || "");
-    setFotoBase64(j.fotoPerfil); setIdEditando(j.idFirebase); setModoEdicion(true); setModalJoven(true);
+    setFotoBase64(j.fotoPerfil); setConsentimientoConfirmadoJoven(false); setAutorizacionTutorJoven(false);
+    setIdEditando(j.idFirebase); setModoEdicion(true); setModalJoven(true);
   };
 
   const cancelarEdicionJoven = () => {
     setNombre(""); setFechaNacimiento(""); setLocalidad(""); setCorreo(""); setGenero(""); setOcupacion(""); 
-    setFotoBase64(null); setIdEditando(""); setModoEdicion(false); setModalJoven(false); setMostrarCamara(false);
+    setFotoBase64(null); setConsentimientoConfirmadoJoven(false); setAutorizacionTutorJoven(false);
+    setIdEditando(""); setModoEdicion(false); setModalJoven(false); setMostrarCamara(false);
   };
 
   const registrarNegocio = async (e: React.FormEvent) => {
@@ -582,10 +604,19 @@ export default function PanelAdministrativo() {
 
   const publicarAnuncio = async (e: React.FormEvent) => {
     e.preventDefault(); if(!tituloAviso || !mensajeAviso) return;
+    if (!aceptaNeutralidadAviso) {
+      alert("Confirma que el aviso es institucional y no contiene promoción política, electoral o personalizada.");
+      return;
+    }
     setCargando(true);
     try {
-      await addDoc(collection(db, "anuncios"), { titulo: tituloAviso.trim(), mensaje: mensajeAviso.trim(), audiencia: audienciaAviso, fecha: new Date().toISOString() });
-      alert("¡Aviso publicado globalmente!"); setTituloAviso(""); setMensajeAviso(""); setAudienciaAviso("Todos"); cargarDirectorio(adminActual.rol);
+      await addDoc(collection(db, "anuncios"), {
+        titulo: tituloAviso.trim(), mensaje: mensajeAviso.trim(), audiencia: audienciaAviso,
+        fecha: new Date().toISOString(), declaracionNeutralidad: true,
+        declaracionNeutralidadVersion: DECLARACION_NEUTRALIDAD_VERSION,
+        publicadoPorUid: auth.currentUser?.uid || null,
+      });
+      alert("¡Aviso publicado globalmente!"); setTituloAviso(""); setMensajeAviso(""); setAudienciaAviso("Todos"); setAceptaNeutralidadAviso(false); cargarDirectorio(adminActual.rol);
     } catch(e) { alert("Error al publicar aviso."); }
     setCargando(false);
   };
@@ -613,27 +644,45 @@ export default function PanelAdministrativo() {
   };
 
   const descargarExcel = (tipo: string) => {
-    let csvContent = "\uFEFF"; let nombreArchivo = ""; const limpiar = (texto: string) => `"${(texto || "").toString().replace(/"/g, '""')}"`;
+    if (!window.confirm("Se descargará un reporte estadístico agregado, sin nombres, correos, fechas de nacimiento ni códigos QR. ¿Continuar?")) return;
+    let csvContent = "\uFEFF"; let nombreArchivo = ""; const limpiar = (texto: string | number) => `"${String(texto ?? "").replace(/"/g, '""')}"`;
     if (tipo === "jovenes") {
-      nombreArchivo = "Directorio_Jovenes.csv"; csvContent += "Nombre,Fecha Nacimiento,Edad,Género,Ocupación,Localidad,Correo,Código QR\n";
-      jovenesFiltrados.forEach(j => { 
-        const edadActual = j.fechaNacimiento ? calcularEdad(j.fechaNacimiento) : (j.edad || "N/A");
-        const generoExcel = j.genero || "No especificado";
-        csvContent += `${limpiar(j.nombreCompleto)},${limpiar(j.fechaNacimiento || 'N/A')},${limpiar(edadActual.toString())},${limpiar(generoExcel)},${limpiar(j.ocupacion)},${limpiar(j.localidad)},${limpiar(j.correo)},${limpiar(j.codigoUnicoQR)}\n`; 
+      nombreArchivo = "Estadisticas_Jovenes.csv";
+      csvContent += "Sección,Categoría,Total\n";
+      csvContent += `${limpiar("General")},${limpiar("Jóvenes activos")},${listaJovenes.length}\n`;
+      const edades: Record<string, number> = { "12 a 14": 0, "15 a 17": 0, "18 a 24": 0, "25 a 29": 0, "No disponible": 0 };
+      const generos: Record<string, number> = {};
+      listaJovenes.forEach((j) => {
+        const edad = j.fechaNacimiento ? calcularEdad(j.fechaNacimiento) : Number(j.edad);
+        const rango = edad >= 12 && edad <= 14 ? "12 a 14" : edad <= 17 && edad >= 15 ? "15 a 17" : edad <= 24 && edad >= 18 ? "18 a 24" : edad <= 29 && edad >= 25 ? "25 a 29" : "No disponible";
+        edades[rango] += 1;
+        const genero = j.genero || "No especificado";
+        generos[genero] = (generos[genero] || 0) + 1;
       });
+      Object.entries(edades).forEach(([categoria, total]) => { csvContent += `${limpiar("Rango de edad")},${limpiar(categoria)},${total}\n`; });
+      Object.entries(generos).sort(([a], [b]) => a.localeCompare(b)).forEach(([categoria, total]) => { csvContent += `${limpiar("Género")},${limpiar(categoria)},${total}\n`; });
     } else if (tipo === "negocios") {
-      nombreArchivo = "Directorio_Negocios.csv"; csvContent += "Comercio,Giro,Correo\n";
-      negociosFiltrados.forEach(n => { csvContent += `${limpiar(n.nombreComercial)},${limpiar(n.giro)},${limpiar(n.correo)}\n`; });
+      nombreArchivo = "Estadisticas_Negocios.csv";
+      csvContent += "Sección,Categoría,Total\n";
+      csvContent += `${limpiar("General")},${limpiar("Negocios activos")},${listaNegocios.length}\n`;
+      const giros: Record<string, number> = {};
+      listaNegocios.forEach((n) => { const giro = n.giro || "No especificado"; giros[giro] = (giros[giro] || 0) + 1; });
+      Object.entries(giros).sort(([a], [b]) => a.localeCompare(b)).forEach(([categoria, total]) => { csvContent += `${limpiar("Giro")},${limpiar(categoria)},${total}\n`; });
     } else if (tipo === "visitas") {
-      nombreArchivo = `Reporte_Visitas_${mesSeleccionado}.csv`; csvContent += "Fecha,Identificador anónimo,Negocio,Promoción\n";
-      visitasFiltradas.forEach(v => { 
-         const f = new Date(v.fecha).toLocaleString("es-MX"); 
-         const anonimo = String(v.youthUid || v.idJoven || "registro").slice(0, 8);
-         csvContent += `${limpiar(f)},${limpiar(anonimo)},${limpiar(v.nombreNegocio)},${limpiar(v.nombrePromo)}\n`; 
+      nombreArchivo = `Estadisticas_Visitas_${mesSeleccionado}.csv`;
+      csvContent += "Mes,Negocio,Promoción,Total\n";
+      const resumen: Record<string, { negocio: string; promocion: string; total: number }> = {};
+      visitasFiltradas.forEach((v) => {
+        const negocio = v.nombreNegocio || "No especificado";
+        const promocion = v.nombrePromo || "Visita general";
+        const clave = `${negocio}\u0000${promocion}`;
+        resumen[clave] = resumen[clave] || { negocio, promocion, total: 0 };
+        resumen[clave].total += 1;
       });
+      Object.values(resumen).sort((a, b) => b.total - a.total).forEach((fila) => { csvContent += `${limpiar(mesSeleccionado)},${limpiar(fila.negocio)},${limpiar(fila.promocion)},${fila.total}\n`; });
     }
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.setAttribute("download", nombreArchivo); document.body.appendChild(link); link.click(); document.body.removeChild(link);
+    const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.setAttribute("download", nombreArchivo); document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
   };
 
   const cambiarPestaña = (nuevaPestaña: string) => { setPestaña(nuevaPestaña); setBusqueda(""); };
@@ -745,6 +794,10 @@ export default function PanelAdministrativo() {
           </div>
         </div>
 
+        <div className="mb-6 rounded-2xl border border-violet-200 bg-violet-50 px-5 py-4 text-xs font-semibold leading-relaxed text-violet-950 shadow-sm">
+          <strong>Uso institucional y apartidista.</strong> Los expedientes y métricas son exclusivamente operativos y estadísticos. Está prohibido copiarlos, exportarlos o utilizarlos para propaganda, segmentación, contacto, movilización o cualquier finalidad político-electoral. Los reportes descargables excluyen datos personales e identificadores de jóvenes.
+        </div>
+
         <div className="bg-white rounded-full shadow-lg border border-slate-100 p-2.5 flex flex-col md:flex-row justify-between items-center gap-4 mb-8">
           <div className="flex gap-2 w-full md:w-auto overflow-x-auto scroll-estetico pb-2 md:pb-0">
             <button onClick={() => cambiarPestaña("pendientes")} className={`relative whitespace-nowrap px-6 py-3.5 rounded-full text-[10px] font-black uppercase tracking-widest flex-1 md:flex-none text-center transition-all ${pestaña === "pendientes" ? "bg-slate-900 text-white shadow-md" : "text-slate-500 hover:bg-slate-100"}`}>
@@ -765,7 +818,7 @@ export default function PanelAdministrativo() {
             {pestaña === "negocios" && <button onClick={() => {cancelarEdicionNegocio(); setModalNegocio(true)}} className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg transition-colors active:scale-95">+ Crear Negocio</button>}
             {pestaña === "equipo" && adminActual.rol === "Master" && <button onClick={() => setModalAdmin(true)} className="flex-1 md:flex-none bg-slate-900 hover:bg-black text-white px-5 py-3.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg transition-colors active:scale-95">+ Usuario</button>}
             {(pestaña === "jovenes" || pestaña === "negocios" || pestaña === "visitas") && (
-              <button onClick={() => descargarExcel(pestaña)} className="flex-1 md:flex-none bg-[#107C41] hover:bg-green-700 text-white px-5 py-3.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 transition-colors active:scale-95">📊 Exportar Excel</button>
+              <button onClick={() => descargarExcel(pestaña)} className="flex-1 md:flex-none bg-[#107C41] hover:bg-green-700 text-white px-5 py-3.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 transition-colors active:scale-95">📊 Reporte sin datos personales</button>
             )}
           </div>
         </div>
@@ -828,6 +881,11 @@ export default function PanelAdministrativo() {
                                                <p className="text-sm font-bold text-slate-500 mb-3">
                                                   <span className="text-stone-600 font-black">{calcularEdad(s.fechaNacimiento)} años</span> • {s.correo} • {s.genero || 'Género no especificado'}
                                                </p>
+                                               {s.esMenorAlRegistro && (
+                                                 <span className={`mb-3 w-fit rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-wider ${s.autorizacionTutorDeclarada ? "bg-violet-100 text-violet-700" : "bg-red-100 text-red-700"}`}>
+                                                   {s.autorizacionTutorDeclarada ? "Autorización de tutor declarada" : "Falta autorización de tutor"}
+                                                 </span>
+                                               )}
                                                <button onClick={() => setImagenCompleta(s.documentoProbatorio)} className="bg-indigo-50 text-indigo-700 font-black text-[10px] uppercase tracking-widest px-5 py-2.5 rounded-[1rem] flex items-center w-fit gap-2 hover:bg-indigo-600 hover:text-white transition-all border border-indigo-100 shadow-sm active:scale-95">
                                                   👀 Ver Documento Probatorio
                                                </button>
@@ -1071,6 +1129,9 @@ export default function PanelAdministrativo() {
                    <div className="bg-gradient-to-br from-teal-50 to-white p-8 md:p-10 rounded-[2.5rem] border border-teal-100 mb-10 shadow-sm">
                       <h3 className="text-2xl font-black text-[#0F766E] mb-6 tracking-tight">📣 Megáfono del Sistema</h3>
                       <form onSubmit={publicarAnuncio} className="space-y-4">
+                        <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 text-xs font-semibold leading-relaxed text-violet-950">
+                          <strong>Comunicación institucional únicamente.</strong> No publiques nombres, imágenes, voces, lemas o símbolos que impliquen promoción personal, partidista o electoral; tampoco mensajes que condicionen el programa o sus beneficios.
+                        </div>
                         <div className="flex flex-col sm:flex-row gap-4">
                            <select value={audienciaAviso} onChange={e => setAudienciaAviso(e.target.value)} className="bg-white border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-700 outline-none focus:border-[#0F766E] w-full sm:w-1/3 shadow-sm transition-all">
                               <option value="Todos">Para Todos</option><option value="Jovenes">Solo Jóvenes</option><option value="Negocios">Solo Negocios</option>
@@ -1078,6 +1139,10 @@ export default function PanelAdministrativo() {
                            <input type="text" value={tituloAviso} onChange={e => setTituloAviso(e.target.value)} placeholder="Título del Aviso..." className="w-full sm:w-2/3 bg-white border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-700 outline-none focus:border-[#0F766E] shadow-sm transition-all" required />
                         </div>
                         <textarea value={mensajeAviso} onChange={e => setMensajeAviso(e.target.value)} placeholder="Escribe el mensaje detallado aquí..." className="w-full bg-white border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-700 outline-none focus:border-[#0F766E] h-32 resize-none shadow-sm transition-all" required></textarea>
+                        <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+                          <input type="checkbox" required checked={aceptaNeutralidadAviso} onChange={(e) => setAceptaNeutralidadAviso(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-violet-600" />
+                          <span className="text-[10px] font-semibold leading-relaxed text-slate-600">Declaro que este aviso es estrictamente institucional, informativo y apartidista, y que no contiene propaganda electoral ni promoción personalizada de una persona servidora pública.</span>
+                        </label>
                         <button type="submit" disabled={cargando} className="w-full bg-[#0F766E] text-white font-black py-4.5 rounded-2xl text-[11px] uppercase tracking-widest hover:bg-slate-900 shadow-lg hover:shadow-teal-900/30 transition-all active:scale-95 mt-2">Lanzar Aviso 🚀</button>
                       </form>
                    </div>
@@ -1167,7 +1232,7 @@ export default function PanelAdministrativo() {
               <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-[#0F766E] font-bold text-slate-700 transition-all outline-none shadow-sm" placeholder="Nombre Completo" required />
               
               <div className="grid grid-cols-2 gap-4">
-                 <input type="date" value={fechaNacimiento} onChange={(e) => setFechaNacimiento(e.target.value)} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-[#0F766E] font-bold text-slate-500 transition-all outline-none shadow-sm" required />
+                 <input type="date" value={fechaNacimiento} onChange={(e) => { setFechaNacimiento(e.target.value); setAutorizacionTutorJoven(false); }} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-[#0F766E] font-bold text-slate-500 transition-all outline-none shadow-sm" required />
                  <select value={genero} onChange={(e) => setGenero(e.target.value)} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-[#0F766E] font-bold text-slate-700 transition-all outline-none shadow-sm" required>
                     <option value="">Género...</option><option value="Mujer">Mujer</option><option value="Hombre">Hombre</option><option value="No Binario">No Binario</option><option value="Prefiero no decir">Prefiero no decir</option>
                  </select>
@@ -1176,6 +1241,21 @@ export default function PanelAdministrativo() {
               <input type="text" value={localidad} onChange={(e) => setLocalidad(e.target.value)} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-[#0F766E] font-bold text-slate-700 transition-all outline-none shadow-sm" placeholder="Localidad o Colonia" required />
               <input type="text" value={ocupacion} onChange={(e) => setOcupacion(e.target.value)} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-[#0F766E] font-bold text-slate-700 transition-all outline-none shadow-sm" placeholder="Ocupación (Ej: Estudiante en UAdeO)" required />
               <input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-[#0F766E] font-bold text-slate-700 transition-all outline-none shadow-sm" placeholder="Correo Electrónico (Para accesos)" required disabled={modoEdicion} />
+
+              {!modoEdicion && (
+                <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <label className="flex cursor-pointer items-start gap-3">
+                    <input type="checkbox" required checked={consentimientoConfirmadoJoven} onChange={(e) => setConsentimientoConfirmadoJoven(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[#0F766E]" />
+                    <span className="text-[10px] font-semibold leading-relaxed text-slate-600">Confirmo que la persona titular conoció y aceptó los Términos, el Aviso de Privacidad y el carácter gratuito y apartidista del programa.</span>
+                  </label>
+                  {fechaNacimiento && calcularEdad(fechaNacimiento) >= 12 && calcularEdad(fechaNacimiento) < 18 && (
+                    <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-violet-200 bg-violet-50 p-3">
+                      <input type="checkbox" required checked={autorizacionTutorJoven} onChange={(e) => setAutorizacionTutorJoven(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-violet-600" />
+                      <span className="text-[10px] font-semibold leading-relaxed text-violet-950">Confirmo que el IMJU cuenta con autorización expresa de la madre, padre o persona tutora para registrar a esta persona menor, tratar sus datos y emitir su tarjeta digital.</span>
+                    </label>
+                  )}
+                </div>
+              )}
               
               <button type="submit" disabled={cargando} className={`w-full mt-6 text-white font-black py-5 rounded-[2rem] text-xs uppercase tracking-widest transition-all active:scale-95 ${cargando ? "bg-slate-400" : "bg-[#0F766E] hover:bg-slate-900 shadow-xl shadow-teal-900/20"}`}>
                 {modoEdicion ? "Guardar Cambios" : "Registrar y Activar Joven"}

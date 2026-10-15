@@ -6,6 +6,7 @@ import { sendPasswordResetEmail, signInWithEmailAndPassword } from "firebase/aut
 import { auth, authPersistenceReady } from "../../firebase";
 import { normalizarCorreo } from "@/lib/credenciales";
 import { compressImageDataUrl, readFileAsDataUrl } from "@/lib/client-image";
+import { CONSENTIMIENTO_VERSION } from "@/lib/politica-programa";
 import dynamic from "next/dynamic";
 import "leaflet/dist/leaflet.css";
 
@@ -100,6 +101,7 @@ export default function LoginRegistroNegocios() {
         horario: horario.trim(),
         telefono: telefono.trim(),
         aceptoTerminos: true,
+        consentimientoVersion: CONSENTIMIENTO_VERSION,
       });
       if (new Blob([payload]).size > 3_800_000) {
         throw new Error("Las imágenes pesan demasiado. Selecciona imágenes más ligeras e inténtalo nuevamente.");
@@ -241,7 +243,7 @@ export default function LoginRegistroNegocios() {
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-start gap-3 mt-4">
                    <input type="checkbox" id="terminos" checked={aceptaTerminos} onChange={e => setAceptaTerminos(e.target.checked)} className="mt-1 w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500" />
                    <label htmlFor="terminos" className="text-[10px] text-slate-600 font-medium leading-relaxed">
-                     Declaro que la información es verídica. He leído y acepto los <a href="/aviso-de-privacidad" target="_blank" className="text-emerald-700 font-bold underline">Términos, Condiciones y Aviso de Privacidad</a>. Comprendo que la evidencia de fachada se utilizará sólo para validar la solicitud y se eliminará al aprobarla o rechazarla. Mi negocio es el <strong>único responsable legal y comercial</strong> de las promociones y ofertas de empleo publicadas en esta plataforma, deslindando al IMJU de toda responsabilidad.
+                     Declaro que la información es verídica. He leído y acepto los <a href="/aviso-de-privacidad" target="_blank" className="text-emerald-700 font-bold underline">Términos, Condiciones y Aviso de Privacidad</a>. Comprendo que la evidencia de fachada se utilizará sólo para validar la solicitud y se eliminará al aprobarla o rechazarla. Mi negocio es el <strong>único responsable legal y comercial</strong> de sus promociones y vacantes. También acepto que el programa es gratuito y apartidista, y que no usaré beneficios, empleos, datos ni publicaciones para propaganda, proselitismo, afiliación, condicionamiento o presión político-electoral.
                    </label>
                 </div>
 

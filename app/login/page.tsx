@@ -8,6 +8,7 @@ import Link from "next/link";
 import { Camera, type CameraHandle } from "@/components/NativeCamera";
 import { normalizarCorreo } from "@/lib/credenciales";
 import { compressImageDataUrl, readFileAsDataUrl } from "@/lib/client-image";
+import { CONSENTIMIENTO_VERSION } from "@/lib/politica-programa";
 
 export default function LoginJoven() {
   const [vistaActual, setVistaActual] = useState("login"); 
@@ -24,6 +25,8 @@ export default function LoginJoven() {
   const [regGenero, setRegGenero] = useState("");
   const [registrando, setRegistrando] = useState(false);
   const [registroExitoso, setRegistroExitoso] = useState(false);
+  const [aceptaTerminos, setAceptaTerminos] = useState(false);
+  const [autorizacionTutor, setAutorizacionTutor] = useState(false);
 
   const [fotoBase64, setFotoBase64] = useState<string | null>(null);
   const [docBase64, setDocBase64] = useState<string | null>(null); 
@@ -117,6 +120,11 @@ export default function LoginJoven() {
     if (!regGenero) { alert("Por favor, selecciona tu género en el Paso 1."); return; }
     if (!fotoBase64) { alert("Falta el PASO 2: Tómate o sube una fotografía para tu perfil."); return; }
     if (!docBase64 && !docFile) { alert("Falta el PASO 3: Tómate foto o sube un documento que compruebe tu identidad."); return; }
+    if (!aceptaTerminos) { alert("Debes leer y aceptar los Términos, Condiciones y Aviso de Privacidad."); return; }
+    if (edad < 18 && !autorizacionTutor) {
+      alert("Como eres menor de edad, necesitas confirmar que cuentas con la autorización de tu madre, padre o persona tutora.");
+      return;
+    }
 
     setRegistrando(true);
     try {
@@ -139,6 +147,9 @@ export default function LoginJoven() {
         correo: normalizarCorreo(regCorreo),
         fotoPerfil: fotoBase64,
         documentoProbatorio: documento,
+        aceptoTerminos: true,
+        autorizacionTutor: edad < 18 ? autorizacionTutor : false,
+        consentimientoVersion: CONSENTIMIENTO_VERSION,
       });
       if (new Blob([payload]).size > 3_800_000) {
         throw new Error("Los archivos todavía pesan demasiado. Usa una fotografía del documento o un PDF menor a 1.5 MB.");
@@ -157,6 +168,7 @@ export default function LoginJoven() {
       setRegistroExitoso(true);
       setRegNombre(""); setRegFechaNac(""); setRegCorreo(""); setRegGenero("");
       setFotoBase64(null); setDocBase64(null); setDocFile(null);
+      setAceptaTerminos(false); setAutorizacionTutor(false);
 
     } catch (error: any) {
       console.error("Error registrando joven:", error);
@@ -270,7 +282,7 @@ export default function LoginJoven() {
                </div>
                <div>
                  <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-300 mb-1">Fecha de Nacimiento</label>
-                 <input type="date" value={regFechaNac} onChange={(e) => setRegFechaNac(e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-500 dark:text-slate-300 outline-none focus:border-[#0F766E]" required />
+                 <input type="date" value={regFechaNac} onChange={(e) => { setRegFechaNac(e.target.value); setAutorizacionTutor(false); }} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-500 dark:text-slate-300 outline-none focus:border-[#0F766E]" required />
                </div>
                <div>
                  <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-300 mb-1">Género</label>
@@ -326,12 +338,31 @@ export default function LoginJoven() {
                <p className="mt-3 text-[9px] font-semibold text-slate-400">Si eliges PDF, debe pesar menos de 1.5 MB. Las fotografías se comprimen automáticamente.</p>
             </div>
 
+            {regFechaNac && calcularEdad(regFechaNac) >= 12 && calcularEdad(regFechaNac) < 18 && (
+              <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-900/60 dark:bg-violet-950/25">
+                <label className="flex cursor-pointer items-start gap-3">
+                  <input
+                    type="checkbox"
+                    required
+                    checked={autorizacionTutor}
+                    onChange={(e) => setAutorizacionTutor(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded accent-violet-600"
+                  />
+                  <span className="text-[10px] font-medium leading-relaxed text-slate-700 dark:text-slate-200">
+                    <strong>Soy menor de 18 años</strong> y confirmo que mi madre, padre o persona tutora revisó conmigo el aviso, conoce el registro y <strong>autorizó expresamente</strong> el tratamiento de mis datos, fotografía, documento de validación y la creación de mi Tarjeta Joven digital.
+                    <span className="mt-1 block text-slate-500 dark:text-slate-400">El IMJU podrá solicitar la comprobación de esta autorización cuando resulte necesario.</span>
+                  </span>
+                </label>
+              </div>
+            )}
+
             <div className="bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-700 p-4 rounded-2xl">
               <label className="flex items-start gap-3 cursor-pointer">
-                <input type="checkbox" required className="w-4 h-4 mt-0.5 accent-[#0F766E] cursor-pointer rounded shrink-0" />
+                <input type="checkbox" required checked={aceptaTerminos} onChange={(e) => setAceptaTerminos(e.target.checked)} className="w-4 h-4 mt-0.5 accent-[#0F766E] cursor-pointer rounded shrink-0" />
                 <span className="text-[10px] font-medium text-slate-600 dark:text-slate-300 leading-relaxed">
                   He leído y acepto los <Link href="/aviso-de-privacidad" target="_blank" className="text-[#0F766E] dark:text-teal-400 font-bold underline">Términos, Condiciones y Aviso de Privacidad</Link> del IMJU Elota.
                   <span className="mt-1 block text-slate-400">Entiendo que mi documento se utilizará sólo para validar la solicitud y se eliminará al aprobarla o rechazarla.</span>
+                  <span className="mt-1 block font-semibold text-slate-500 dark:text-slate-300">También entiendo que el programa es gratuito y apartidista: registrarme o recibir beneficios nunca depende de apoyar, afiliarme o votar por una persona o partido.</span>
                 </span>
               </label>
             </div>
