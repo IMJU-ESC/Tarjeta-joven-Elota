@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, authPersistenceReady, db } from "../firebase";
+import { LEYENDA_PROGRAMA } from "@/lib/politica-programa";
 
 const INSTAGRAM_URL = "https://www.instagram.com/imjuelotamx?stkn=M24xYzdweDVzMDI3";
 const FACEBOOK_URL = "https://www.facebook.com/profile.php?id=100075974077385";
@@ -122,10 +123,7 @@ export default function Inicio() {
           </section>
         </div>
 
-        <section className="mb-5 rounded-2xl border border-cyan-300/20 bg-white/[.045] px-5 py-4 text-center sm:text-left">
-          <p className="text-[9px] font-black uppercase tracking-[.2em] text-cyan-300">Programa público, gratuito y apartidista</p>
-          <p className="mt-1 text-[10px] font-medium leading-5 text-slate-300">Tu registro y tus beneficios nunca dependen de afiliación, asistencia, apoyo o voto. Está prohibido usar la Tarjeta Joven Elota, sus datos o comunicaciones con fines político-electorales.</p>
-        </section>
+        <p className="mb-4 text-center text-[9px] font-medium leading-5 text-slate-500">{LEYENDA_PROGRAMA}</p>
 
         <footer className="flex flex-col items-center justify-between gap-4 border-t border-white/10 py-5 text-center sm:flex-row sm:text-left">
           <div className="flex items-center gap-3">

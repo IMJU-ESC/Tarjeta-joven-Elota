@@ -20,14 +20,6 @@ export default function AvisoDePrivacidad() {
         {/* CONTENIDO LEGAL */}
         <div className="bg-white rounded-[2.5rem] shadow-xl border border-slate-100 p-8 md:p-12 space-y-8 text-slate-700 leading-relaxed text-[15px] animate-slide-up">
 
-          <section className="rounded-[2rem] border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-cyan-50 p-6 md:p-8">
-            <p className="mb-2 text-[10px] font-black uppercase tracking-[.22em] text-violet-700">Compromiso institucional permanente</p>
-            <h2 className="mb-3 text-2xl font-black tracking-tight text-slate-900">Programa público, gratuito y apartidista</h2>
-            <p className="font-semibold text-slate-700">
-              El registro, la permanencia, la tarjeta, los cupones, las vacantes y cualquier otro beneficio <strong>no están condicionados</strong> a afiliarse, asistir a eventos, difundir contenido, apoyar o votar por partido, candidatura, coalición, persona aspirante o servidora pública alguna. Está prohibido utilizar esta plataforma, sus padrones, códigos QR, estadísticas o comunicaciones con fines de propaganda, proselitismo, promoción personalizada, presión o perfilamiento político-electoral.
-            </p>
-          </section>
-          
           <section>
             <h2 className="text-xl font-black text-[#0F766E] mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">1. Identidad, Domicilio y Declaración General</h2>
             <p className="mb-4">
@@ -48,8 +40,8 @@ export default function AvisoDePrivacidad() {
             </p>
           </section>
 
-          <section className="rounded-[2rem] border border-slate-800 bg-slate-950 p-6 text-slate-200 md:p-8">
-            <h2 className="mb-4 border-b border-white/10 pb-2 text-xl font-black uppercase tracking-widest text-cyan-300">3. Neutralidad Política-Electoral y No Condicionamiento</h2>
+          <section>
+            <h2 className="mb-4 border-b border-slate-100 pb-2 text-xl font-black uppercase tracking-widest text-[#0F766E]">3. Neutralidad Política-Electoral y No Condicionamiento</h2>
             <ul className="list-disc space-y-3 pl-6 font-medium">
               <li>La Tarjeta Joven Elota no pertenece ni beneficia a partido, candidatura, coalición, persona aspirante o persona servidora pública.</li>
               <li>Nadie puede solicitar voto, apoyo, afiliación, datos políticos, asistencia a actos, fotografías, publicaciones en redes o cualquier contraprestación para registrar, aprobar, conservar o utilizar la tarjeta y sus beneficios.</li>
@@ -58,7 +50,7 @@ export default function AvisoDePrivacidad() {
               <li>Los avisos del sistema deberán ser institucionales, informativos y sin nombres, imágenes, voces, lemas o símbolos que impliquen promoción personalizada o partidista.</li>
               <li>Durante los periodos electorales, la difusión institucional se ajustará, limitará o suspenderá en los casos y plazos exigidos por la autoridad y la normativa aplicable.</li>
             </ul>
-            <p className="mt-4 text-sm text-slate-300">El contenido contrario a estas reglas podrá retirarse y la cuenta responsable podrá suspenderse, previa revisión institucional y sin perjuicio de las denuncias o responsabilidades que correspondan.</p>
+            <p className="mt-4 text-sm text-slate-600">El contenido contrario a estas reglas podrá retirarse y la cuenta responsable podrá suspenderse, previa revisión institucional y sin perjuicio de las denuncias o responsabilidades que correspondan.</p>
           </section>
 
           <section>
@@ -82,11 +74,11 @@ export default function AvisoDePrivacidad() {
           <section className="rounded-[2rem] border border-violet-200 bg-violet-50/70 p-6 md:p-8">
             <h2 className="mb-4 border-b border-violet-200 pb-2 text-xl font-black uppercase tracking-widest text-violet-800">5. Registro de Personas Menores de Edad</h2>
             <p className="mb-4">
-              Las personas de <strong>12 a 17 años</strong> sólo podrán registrarse con el conocimiento y la autorización expresa de su madre, padre o persona tutora. En el formulario se solicitará una declaración específica que confirme que dicha persona revisó este aviso y autorizó el tratamiento de los datos, la fotografía, el documento de validación, la creación de la cuenta y la emisión de la tarjeta digital.
+              Las personas de <strong>12 a 17 años</strong> sólo podrán registrarse con el conocimiento y la autorización expresa de su madre, padre o persona tutora. El formulario solicitará el parentesco, una fotografía de la credencial de quien autoriza y una aceptación específica de estos Términos, Condiciones y Aviso de Privacidad.
             </p>
             <ul className="list-disc space-y-3 pl-6 font-medium">
-              <li>El sistema conserva como evidencia la condición de minoría de edad al registrarse, la confirmación de autorización, la fecha y la versión del aviso aceptado; no solicita datos adicionales del tutor mediante la casilla.</li>
-              <li>El IMJU podrá pedir posteriormente documentación o confirmación adicional para comprobar la representación o autorización, cuando la normativa, la naturaleza del trámite o una situación de riesgo así lo requieran.</li>
+              <li>La credencial se utiliza exclusivamente para comprobar la identidad y la autorización durante la revisión de la solicitud. No se incorpora a la tarjeta digital ni se comparte con negocios aliados.</li>
+              <li>Al aprobar o rechazar la solicitud, el sistema elimina la credencial del almacenamiento operativo. Sólo conserva el parentesco, la fecha, la versión aceptada y la constancia de que la autorización fue verificada.</li>
               <li>La madre, el padre o la persona tutora podrá ejercer los derechos que correspondan en representación de la persona menor, acreditando su identidad y representación ante el IMJU.</li>
               <li>Si no se cuenta con la autorización indicada, no deberá enviarse la solicitud.</li>
             </ul>
@@ -95,10 +87,10 @@ export default function AvisoDePrivacidad() {
           <section className="rounded-[2rem] border border-slate-200 bg-slate-50 p-6 md:p-8">
             <h2 className="mb-4 border-b border-slate-200 pb-2 text-xl font-black uppercase tracking-widest text-[#0F766E]">6. Conservación y Eliminación de Evidencias de Validación</h2>
             <p className="mb-4">
-              Los documentos de identidad enviados por jóvenes y las fotografías de fachada proporcionadas por los negocios se utilizarán <strong>únicamente para revisar y resolver la solicitud de registro</strong>. Permanecerán en almacenamiento restringido mientras la solicitud tenga el estado de pendiente.
+              Los documentos de identidad enviados por jóvenes, las credenciales de madres, padres o personas tutoras y las fotografías de fachada proporcionadas por los negocios se utilizarán <strong>únicamente para revisar y resolver la solicitud de registro</strong>. Permanecerán en almacenamiento restringido mientras la solicitud tenga el estado de pendiente.
             </p>
             <ul className="list-disc space-y-3 pl-6 font-medium">
-              <li>Al aprobar una solicitud, el sistema elimina del almacenamiento operativo el documento de identidad o la evidencia de fachada y retira sus enlaces del expediente activo.</li>
+              <li>Al aprobar una solicitud, el sistema elimina del almacenamiento operativo el documento de identidad, la credencial del tutor o la evidencia de fachada y retira sus enlaces del expediente activo.</li>
               <li>Al rechazar una solicitud, se elimina la evidencia de validación y también los archivos asociados a la solicitud rechazada, incluyendo fotografía de perfil o logotipo, al no existir una cuenta activa que justifique su conservación.</li>
               <li>La fotografía de perfil del joven y el logotipo del negocio sólo se conservan cuando la solicitud es aprobada, pues son necesarios para identificar la tarjeta digital y el perfil público del comercio.</li>
               <li>Las evidencias de validación no se utilizarán con fines publicitarios, comerciales, de reconocimiento facial ni para finalidades distintas a comprobar los requisitos del programa.</li>

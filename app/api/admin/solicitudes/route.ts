@@ -3,11 +3,12 @@ import { NextResponse } from "next/server";
 import { adminAuth, adminDb, requireAdmin } from "@/lib/firebase-admin";
 import { publicAppUrl, sendSystemMail } from "@/lib/mailer";
 import { CONSENTIMIENTO_VERSION, DECLARACION_NEUTRALIDAD_VERSION } from "@/lib/politica-programa";
-import { removeStoredFile, saveDataUrl } from "@/lib/server-storage";
+import { removeStoredFile, saveDataUrl, validateDataUrl } from "@/lib/server-storage";
 
 export const runtime = "nodejs";
 
 const text = (value: unknown, max = 500) => typeof value === "string" ? value.trim().slice(0, max) : "";
+const guardianRelationships = new Set(["Madre", "Padre", "Tutor legal"]);
 
 function ageFrom(date: string) {
   const [year, month, day] = date.split("-").map(Number);
@@ -78,6 +79,27 @@ export async function POST(request: Request) {
       const email = text(payload.correo, 180).toLowerCase();
       const name = text(type === "joven" ? payload.nombreCompleto : payload.nombreComercial, 160);
       if (!/^\S+@\S+\.\S+$/.test(email) || !name) return NextResponse.json({ error: "Nombre o correo no válidos." }, { status: 400 });
+      let youthValidation: { birthDate: string; isMinor: boolean; guardianRelationship: string } | null = null;
+      if (type === "joven") {
+        const birthDate = text(payload.fechaNacimiento, 10);
+        const age = ageFrom(birthDate);
+        if (age < 12 || age > 29) return NextResponse.json({ error: "La edad debe estar entre 12 y 29 años." }, { status: 400 });
+        if (payload.consentimientoConfirmado !== true) {
+          return NextResponse.json({ error: "Confirma que la persona titular aceptó el aviso y las condiciones del programa." }, { status: 400 });
+        }
+        const isMinor = age < 18;
+        const guardianRelationship = text(payload.parentescoTutor, 30);
+        if (isMinor && (
+          payload.autorizacionTutor !== true ||
+          payload.aceptaTerminosTutor !== true ||
+          !guardianRelationships.has(guardianRelationship) ||
+          typeof payload.documentoTutor !== "string"
+        )) {
+          return NextResponse.json({ error: "El alta de una persona menor requiere parentesco, credencial y aceptación de su madre, padre o persona tutora." }, { status: 400 });
+        }
+        if (isMinor) validateDataUrl(payload.documentoTutor, 700_000, true);
+        youthValidation = { birthDate, isMinor, guardianRelationship };
+      }
       const user = await getOrCreateUser(email, name);
       const active: Record<string, unknown> = {
         correo: email,
@@ -87,16 +109,7 @@ export async function POST(request: Request) {
         fechaAprobacion: new Date().toISOString(),
       };
       if (type === "joven") {
-        const birthDate = text(payload.fechaNacimiento, 10);
-        const age = ageFrom(birthDate);
-        if (age < 12 || age > 29) return NextResponse.json({ error: "La edad debe estar entre 12 y 29 años." }, { status: 400 });
-        if (payload.consentimientoConfirmado !== true) {
-          return NextResponse.json({ error: "Confirma que la persona titular aceptó el aviso y las condiciones del programa." }, { status: 400 });
-        }
-        const isMinor = age < 18;
-        if (isMinor && payload.autorizacionTutor !== true) {
-          return NextResponse.json({ error: "El alta de una persona menor requiere confirmar la autorización de su madre, padre o persona tutora." }, { status: 400 });
-        }
+        const { birthDate, isMinor, guardianRelationship } = youthValidation!;
         Object.assign(active, {
           nombreCompleto: name,
           fechaNacimiento: birthDate,
@@ -107,6 +120,14 @@ export async function POST(request: Request) {
           aceptoTerminos: true,
           esMenorAlRegistro: isMinor,
           autorizacionTutorDeclarada: isMinor,
+          ...(isMinor ? {
+            parentescoTutor: guardianRelationship,
+            aceptaTerminosTutor: true,
+            tutorConsentimientoFecha: new Date().toISOString(),
+            documentoTutorVerificadoEnAlta: true,
+            documentoTutorEliminado: true,
+            documentoTutorEliminadoFecha: new Date().toISOString(),
+          } : {}),
           consentimientoVersion: CONSENTIMIENTO_VERSION,
           consentimientoFecha: new Date().toISOString(),
           consentimientoCapturadoPorAdmin: true,
@@ -163,8 +184,13 @@ export async function POST(request: Request) {
     if (action === "aprobar" && type === "joven") {
       const age = ageFrom(text(data.fechaNacimiento, 10));
       if (age < 12 || age > 29) return NextResponse.json({ error: "La edad del registro no cumple el rango de 12 a 29 años." }, { status: 400 });
-      if (age < 18 && data.autorizacionTutorDeclarada !== true) {
-        return NextResponse.json({ error: "No puede aprobarse una persona menor sin autorización de madre, padre o persona tutora." }, { status: 400 });
+      if (age < 18 && (
+        data.autorizacionTutorDeclarada !== true ||
+        data.aceptaTerminosTutor !== true ||
+        !guardianRelationships.has(text(data.parentescoTutor, 30)) ||
+        !data.documentoTutorPath
+      )) {
+        return NextResponse.json({ error: "No puede aprobarse una persona menor sin parentesco, aceptación y credencial de su madre, padre o persona tutora." }, { status: 400 });
       }
     }
 
@@ -173,6 +199,7 @@ export async function POST(request: Request) {
       if (!reason) return NextResponse.json({ error: "Escribe el motivo del rechazo." }, { status: 400 });
       await Promise.all([
         removeStoredFile(data.documentoProbatorioPath),
+        removeStoredFile(data.documentoTutorPath),
         removeStoredFile(data.fotoPerfilPath),
         removeStoredFile(data.evidenciaFachadaPath),
         removeStoredFile(data.logoPath),
@@ -206,17 +233,25 @@ export async function POST(request: Request) {
     delete activeData.contrasena;
     delete activeData.documentoProbatorio;
     delete activeData.documentoProbatorioPath;
+    delete activeData.documentoTutor;
+    delete activeData.documentoTutorPath;
+    delete activeData.documentoTutorMime;
     delete activeData.evidenciaFachada;
     delete activeData.evidenciaFachadaPath;
 
     if (type === "joven") {
       activeData.codigoUnicoQR = data.codigoUnicoQR || `TJE-${crypto.randomBytes(12).toString("hex").toUpperCase()}`;
+      if (data.esMenorAlRegistro) {
+        activeData.documentoTutorEliminado = true;
+        activeData.documentoTutorEliminadoFecha = new Date().toISOString();
+      }
     }
 
     // La evidencia sólo existe para validar la solicitud. Se elimina antes de
     // activar el expediente para impedir que una aprobación conserve el archivo.
     await Promise.all([
       removeStoredFile(data.documentoProbatorioPath),
+      removeStoredFile(data.documentoTutorPath),
       removeStoredFile(data.evidenciaFachadaPath),
     ]);
 

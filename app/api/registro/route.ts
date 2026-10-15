@@ -8,6 +8,7 @@ export const runtime = "nodejs";
 
 const text = (value: unknown, max = 160) => typeof value === "string" ? value.trim().slice(0, max) : "";
 const emailOk = (value: string) => /^\S+@\S+\.\S+$/.test(value);
+const guardianRelationships = new Set(["Madre", "Padre", "Tutor legal"]);
 
 function validOrigin(request: Request) {
   const origin = request.headers.get("origin");
@@ -86,7 +87,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Formato de solicitud no válido." }, { status: 415 });
     }
     const contentLength = Number(request.headers.get("content-length") || 0);
-    if (Number.isFinite(contentLength) && contentLength > 2_500_000) {
+    if (Number.isFinite(contentLength) && contentLength > 4_000_000) {
       return NextResponse.json({ error: "La solicitud supera el tamaño permitido." }, { status: 413 });
     }
     assertAdminEnv();
@@ -122,8 +123,14 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Completa correctamente los tres pasos del registro." }, { status: 400 });
       }
       const isMinor = age < 18;
-      if (isMinor && body?.autorizacionTutor !== true) {
-        return NextResponse.json({ error: "El registro de una persona menor requiere autorización de su madre, padre o persona tutora." }, { status: 400 });
+      const guardianRelationship = text(body?.parentescoTutor, 30);
+      if (isMinor && (
+        body?.autorizacionTutor !== true ||
+        body?.aceptaTerminosTutor !== true ||
+        !guardianRelationships.has(guardianRelationship) ||
+        typeof body?.documentoTutor !== "string"
+      )) {
+        return NextResponse.json({ error: "El registro de una persona menor requiere parentesco, credencial y aceptación de su madre, padre o persona tutora." }, { status: 400 });
       }
 
       const profile = await saveDataUrl(body.fotoPerfil, "jovenes_perfiles", 300_000);
@@ -131,6 +138,10 @@ export async function POST(request: Request) {
       const proofLimit = String(body.documentoProbatorio).startsWith("data:application/pdf") ? 1_500_000 : 700_000;
       const proof = await saveDataUrl(body.documentoProbatorio, "jovenes_documentos", proofLimit);
       createdPaths.push(proof.path);
+      const guardianProof = isMinor
+        ? await saveDataUrl(body.documentoTutor, "jovenes_documentos/tutores", 700_000, true)
+        : null;
+      if (guardianProof) createdPaths.push(guardianProof.path);
       await pendingRef.create({
         nombreCompleto: name,
         fechaNacimiento: birthDate,
@@ -145,6 +156,14 @@ export async function POST(request: Request) {
         aceptoTerminos: true,
         esMenorAlRegistro: isMinor,
         autorizacionTutorDeclarada: isMinor,
+        ...(guardianProof ? {
+          parentescoTutor: guardianRelationship,
+          documentoTutor: guardianProof.url,
+          documentoTutorPath: guardianProof.path,
+          documentoTutorMime: guardianProof.mime,
+          aceptaTerminosTutor: true,
+          tutorConsentimientoFecha: new Date().toISOString(),
+        } : {}),
         consentimientoVersion: CONSENTIMIENTO_VERSION,
         consentimientoFecha: new Date().toISOString(),
         declaracionNeutralidadVersion: DECLARACION_NEUTRALIDAD_VERSION,

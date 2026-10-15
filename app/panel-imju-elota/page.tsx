@@ -8,7 +8,7 @@ import { ref, uploadString, getDownloadURL, deleteObject } from "firebase/storag
 import { db, auth, authPersistenceReady, storage } from "../../firebase";
 import { normalizarCorreo } from "@/lib/credenciales";
 import { compressImageDataUrl, readFileAsDataUrl } from "@/lib/client-image";
-import { CONSENTIMIENTO_VERSION, DECLARACION_NEUTRALIDAD_VERSION } from "@/lib/politica-programa";
+import { CONSENTIMIENTO_VERSION, DECLARACION_NEUTRALIDAD_VERSION, LEYENDA_PROGRAMA } from "@/lib/politica-programa";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -65,6 +65,8 @@ export default function PanelAdministrativo() {
   const [fotoBase64, setFotoBase64] = useState<string | null>(null);
   const [consentimientoConfirmadoJoven, setConsentimientoConfirmadoJoven] = useState(false);
   const [autorizacionTutorJoven, setAutorizacionTutorJoven] = useState(false);
+  const [parentescoTutorJoven, setParentescoTutorJoven] = useState("");
+  const [documentoTutorJoven, setDocumentoTutorJoven] = useState<string | null>(null);
 
   const centroElota = { lat: 23.92173, lng: -106.89264 };
   
@@ -289,8 +291,13 @@ export default function PanelAdministrativo() {
   };
 
   const aprobarSolicitud = async (joven: any) => {
-    if (calcularEdad(joven.fechaNacimiento) < 18 && !joven.autorizacionTutorDeclarada) {
-      alert("No se puede aprobar este registro: corresponde a una persona menor y no existe una declaración de autorización de madre, padre o persona tutora. Rechaza la solicitud para que pueda registrarse nuevamente con el formato actualizado.");
+    if (calcularEdad(joven.fechaNacimiento) < 18 && (
+      !joven.autorizacionTutorDeclarada ||
+      !joven.aceptaTerminosTutor ||
+      !joven.parentescoTutor ||
+      !joven.documentoTutorPath
+    )) {
+      alert("No se puede aprobar este registro: falta el parentesco, la aceptación o la credencial de la madre, padre o persona tutora. Rechaza la solicitud para que pueda registrarse nuevamente con el formato actualizado.");
       return;
     }
     if(!window.confirm(`¿Aprobar y generar acceso para ${joven.nombreCompleto}?`)) return;
@@ -388,6 +395,20 @@ export default function PanelAdministrativo() {
     if (file) await procesarImagen(await readFileAsDataUrl(file), esLogo);
   };
 
+  const manejarSubidaDocumentoTutor = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      alert("La credencial debe enviarse como fotografía.");
+      return;
+    }
+    try {
+      setDocumentoTutorJoven(await compressImageDataUrl(await readFileAsDataUrl(file), "document"));
+    } catch (error: any) {
+      alert(error?.message || "No pudimos optimizar la credencial.");
+    }
+  };
+
   const guardarJoven = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nombre || !fechaNacimiento || !localidad || !correo || !genero || !ocupacion) { alert("Llena todos los campos."); return; }
@@ -399,8 +420,8 @@ export default function PanelAdministrativo() {
       alert("Confirma que la persona titular conoció y aceptó el aviso y las condiciones del programa.");
       return;
     }
-    if (!modoEdicion && edadJoven < 18 && !autorizacionTutorJoven) {
-      alert("Para dar de alta a una persona menor debes confirmar la autorización de su madre, padre o persona tutora.");
+    if (!modoEdicion && edadJoven < 18 && (!autorizacionTutorJoven || !parentescoTutorJoven || !documentoTutorJoven)) {
+      alert("Para dar de alta a una persona menor necesitas parentesco, credencial y aceptación de su madre, padre o persona tutora.");
       return;
     }
 
@@ -441,6 +462,9 @@ export default function PanelAdministrativo() {
             correo: correoNormalizado, genero, ocupacion, fotoPerfil: fotoBase64,
             consentimientoConfirmado: true,
             autorizacionTutor: edadJoven < 18 ? autorizacionTutorJoven : false,
+            aceptaTerminosTutor: edadJoven < 18 ? autorizacionTutorJoven : false,
+            parentescoTutor: edadJoven < 18 ? parentescoTutorJoven : "",
+            documentoTutor: edadJoven < 18 ? documentoTutorJoven : null,
             consentimientoVersion: CONSENTIMIENTO_VERSION,
           },
         });
@@ -470,6 +494,7 @@ export default function PanelAdministrativo() {
   const iniciarAltaJoven = () => {
     setNombre(""); setFechaNacimiento(""); setLocalidad(""); setCorreo(""); setGenero(""); setOcupacion(""); 
     setFotoBase64(null); setConsentimientoConfirmadoJoven(false); setAutorizacionTutorJoven(false);
+    setParentescoTutorJoven(""); setDocumentoTutorJoven(null);
     setIdEditando(""); setModoEdicion(false); setModalJoven(true);
   };
 
@@ -477,12 +502,14 @@ export default function PanelAdministrativo() {
     setNombre(j.nombreCompleto); setFechaNacimiento(j.fechaNacimiento || ""); setLocalidad(j.localidad);
     setCorreo(j.correo); setGenero(j.genero || ""); setOcupacion(j.ocupacion || "");
     setFotoBase64(j.fotoPerfil); setConsentimientoConfirmadoJoven(false); setAutorizacionTutorJoven(false);
+    setParentescoTutorJoven(""); setDocumentoTutorJoven(null);
     setIdEditando(j.idFirebase); setModoEdicion(true); setModalJoven(true);
   };
 
   const cancelarEdicionJoven = () => {
     setNombre(""); setFechaNacimiento(""); setLocalidad(""); setCorreo(""); setGenero(""); setOcupacion(""); 
     setFotoBase64(null); setConsentimientoConfirmadoJoven(false); setAutorizacionTutorJoven(false);
+    setParentescoTutorJoven(""); setDocumentoTutorJoven(null);
     setIdEditando(""); setModoEdicion(false); setModalJoven(false); setMostrarCamara(false);
   };
 
@@ -605,7 +632,7 @@ export default function PanelAdministrativo() {
   const publicarAnuncio = async (e: React.FormEvent) => {
     e.preventDefault(); if(!tituloAviso || !mensajeAviso) return;
     if (!aceptaNeutralidadAviso) {
-      alert("Confirma que el aviso es institucional y no contiene promoción política, electoral o personalizada.");
+      alert("Confirma que el aviso cumple los Términos y Condiciones del programa.");
       return;
     }
     setCargando(true);
@@ -794,9 +821,7 @@ export default function PanelAdministrativo() {
           </div>
         </div>
 
-        <div className="mb-6 rounded-2xl border border-violet-200 bg-violet-50 px-5 py-4 text-xs font-semibold leading-relaxed text-violet-950 shadow-sm">
-          <strong>Uso institucional y apartidista.</strong> Los expedientes y métricas son exclusivamente operativos y estadísticos. Está prohibido copiarlos, exportarlos o utilizarlos para propaganda, segmentación, contacto, movilización o cualquier finalidad político-electoral. Los reportes descargables excluyen datos personales e identificadores de jóvenes.
-        </div>
+        <p className="mb-5 text-center text-[9px] font-medium leading-relaxed text-slate-400">{LEYENDA_PROGRAMA}</p>
 
         <div className="bg-white rounded-full shadow-lg border border-slate-100 p-2.5 flex flex-col md:flex-row justify-between items-center gap-4 mb-8">
           <div className="flex gap-2 w-full md:w-auto overflow-x-auto scroll-estetico pb-2 md:pb-0">
@@ -882,9 +907,16 @@ export default function PanelAdministrativo() {
                                                   <span className="text-stone-600 font-black">{calcularEdad(s.fechaNacimiento)} años</span> • {s.correo} • {s.genero || 'Género no especificado'}
                                                </p>
                                                {s.esMenorAlRegistro && (
-                                                 <span className={`mb-3 w-fit rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-wider ${s.autorizacionTutorDeclarada ? "bg-violet-100 text-violet-700" : "bg-red-100 text-red-700"}`}>
-                                                   {s.autorizacionTutorDeclarada ? "Autorización de tutor declarada" : "Falta autorización de tutor"}
-                                                 </span>
+                                                 <div className="mb-3 flex flex-wrap items-center gap-2">
+                                                   <span className={`w-fit rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-wider ${s.autorizacionTutorDeclarada && s.aceptaTerminosTutor && s.parentescoTutor && s.documentoTutorPath ? "bg-violet-100 text-violet-700" : "bg-red-100 text-red-700"}`}>
+                                                     {s.autorizacionTutorDeclarada && s.aceptaTerminosTutor && s.parentescoTutor && s.documentoTutorPath ? `Tutor verificado · ${s.parentescoTutor}` : "Faltan datos del tutor"}
+                                                   </span>
+                                                   {s.documentoTutor && (
+                                                     <button onClick={() => setImagenCompleta(s.documentoTutor)} className="rounded-full border border-violet-200 bg-white px-3 py-1 text-[9px] font-black uppercase tracking-wider text-violet-700 hover:bg-violet-600 hover:text-white">
+                                                       Ver credencial
+                                                     </button>
+                                                   )}
+                                                 </div>
                                                )}
                                                <button onClick={() => setImagenCompleta(s.documentoProbatorio)} className="bg-indigo-50 text-indigo-700 font-black text-[10px] uppercase tracking-widest px-5 py-2.5 rounded-[1rem] flex items-center w-fit gap-2 hover:bg-indigo-600 hover:text-white transition-all border border-indigo-100 shadow-sm active:scale-95">
                                                   👀 Ver Documento Probatorio
@@ -1129,9 +1161,7 @@ export default function PanelAdministrativo() {
                    <div className="bg-gradient-to-br from-teal-50 to-white p-8 md:p-10 rounded-[2.5rem] border border-teal-100 mb-10 shadow-sm">
                       <h3 className="text-2xl font-black text-[#0F766E] mb-6 tracking-tight">📣 Megáfono del Sistema</h3>
                       <form onSubmit={publicarAnuncio} className="space-y-4">
-                        <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 text-xs font-semibold leading-relaxed text-violet-950">
-                          <strong>Comunicación institucional únicamente.</strong> No publiques nombres, imágenes, voces, lemas o símbolos que impliquen promoción personal, partidista o electoral; tampoco mensajes que condicionen el programa o sus beneficios.
-                        </div>
+                        <p className="px-1 text-[9px] font-medium leading-relaxed text-slate-400">{LEYENDA_PROGRAMA}</p>
                         <div className="flex flex-col sm:flex-row gap-4">
                            <select value={audienciaAviso} onChange={e => setAudienciaAviso(e.target.value)} className="bg-white border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-700 outline-none focus:border-[#0F766E] w-full sm:w-1/3 shadow-sm transition-all">
                               <option value="Todos">Para Todos</option><option value="Jovenes">Solo Jóvenes</option><option value="Negocios">Solo Negocios</option>
@@ -1141,7 +1171,7 @@ export default function PanelAdministrativo() {
                         <textarea value={mensajeAviso} onChange={e => setMensajeAviso(e.target.value)} placeholder="Escribe el mensaje detallado aquí..." className="w-full bg-white border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-700 outline-none focus:border-[#0F766E] h-32 resize-none shadow-sm transition-all" required></textarea>
                         <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4">
                           <input type="checkbox" required checked={aceptaNeutralidadAviso} onChange={(e) => setAceptaNeutralidadAviso(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-violet-600" />
-                          <span className="text-[10px] font-semibold leading-relaxed text-slate-600">Declaro que este aviso es estrictamente institucional, informativo y apartidista, y que no contiene propaganda electoral ni promoción personalizada de una persona servidora pública.</span>
+                          <span className="text-[10px] font-semibold leading-relaxed text-slate-600">Confirmo que este aviso es institucional, informativo y cumple los Términos y Condiciones del programa.</span>
                         </label>
                         <button type="submit" disabled={cargando} className="w-full bg-[#0F766E] text-white font-black py-4.5 rounded-2xl text-[11px] uppercase tracking-widest hover:bg-slate-900 shadow-lg hover:shadow-teal-900/30 transition-all active:scale-95 mt-2">Lanzar Aviso 🚀</button>
                       </form>
@@ -1232,7 +1262,7 @@ export default function PanelAdministrativo() {
               <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-[#0F766E] font-bold text-slate-700 transition-all outline-none shadow-sm" placeholder="Nombre Completo" required />
               
               <div className="grid grid-cols-2 gap-4">
-                 <input type="date" value={fechaNacimiento} onChange={(e) => { setFechaNacimiento(e.target.value); setAutorizacionTutorJoven(false); }} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-[#0F766E] font-bold text-slate-500 transition-all outline-none shadow-sm" required />
+                 <input type="date" value={fechaNacimiento} onChange={(e) => { setFechaNacimiento(e.target.value); setAutorizacionTutorJoven(false); setParentescoTutorJoven(""); setDocumentoTutorJoven(null); }} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-[#0F766E] font-bold text-slate-500 transition-all outline-none shadow-sm" required />
                  <select value={genero} onChange={(e) => setGenero(e.target.value)} className="w-full border-2 border-slate-100 rounded-2xl px-5 py-4 bg-white focus:border-[#0F766E] font-bold text-slate-700 transition-all outline-none shadow-sm" required>
                     <option value="">Género...</option><option value="Mujer">Mujer</option><option value="Hombre">Hombre</option><option value="No Binario">No Binario</option><option value="Prefiero no decir">Prefiero no decir</option>
                  </select>
@@ -1246,14 +1276,36 @@ export default function PanelAdministrativo() {
                 <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <label className="flex cursor-pointer items-start gap-3">
                     <input type="checkbox" required checked={consentimientoConfirmadoJoven} onChange={(e) => setConsentimientoConfirmadoJoven(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[#0F766E]" />
-                    <span className="text-[10px] font-semibold leading-relaxed text-slate-600">Confirmo que la persona titular conoció y aceptó los Términos, el Aviso de Privacidad y el carácter gratuito y apartidista del programa.</span>
+                    <span className="text-[10px] font-semibold leading-relaxed text-slate-600">Confirmo que la persona titular conoció y aceptó los Términos, Condiciones y Aviso de Privacidad.</span>
                   </label>
                   {fechaNacimiento && calcularEdad(fechaNacimiento) >= 12 && calcularEdad(fechaNacimiento) < 18 && (
-                    <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-violet-200 bg-violet-50 p-3">
-                      <input type="checkbox" required checked={autorizacionTutorJoven} onChange={(e) => setAutorizacionTutorJoven(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-violet-600" />
-                      <span className="text-[10px] font-semibold leading-relaxed text-violet-950">Confirmo que el IMJU cuenta con autorización expresa de la madre, padre o persona tutora para registrar a esta persona menor, tratar sus datos y emitir su tarjeta digital.</span>
-                    </label>
+                    <div className="space-y-3 rounded-xl border border-violet-200 bg-violet-50 p-4">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-violet-800">Datos de madre, padre o tutor</p>
+                      <select value={parentescoTutorJoven} onChange={(e) => setParentescoTutorJoven(e.target.value)} className="w-full rounded-xl border border-violet-200 bg-white px-4 py-3 text-xs font-bold text-slate-700 outline-none focus:border-violet-500" required>
+                        <option value="">Selecciona el parentesco...</option>
+                        <option value="Madre">Madre</option>
+                        <option value="Padre">Padre</option>
+                        <option value="Tutor legal">Tutor o tutora legal</option>
+                      </select>
+                      {!documentoTutorJoven ? (
+                        <label className="flex cursor-pointer items-center justify-center rounded-xl border border-violet-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-widest text-violet-700">
+                          📁 Subir credencial
+                          <input type="file" accept="image/*" onChange={manejarSubidaDocumentoTutor} className="hidden" required />
+                        </label>
+                      ) : (
+                        <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-white p-3">
+                          <span className="text-[10px] font-bold text-emerald-700">✓ Credencial lista y comprimida</span>
+                          <button type="button" onClick={() => setDocumentoTutorJoven(null)} className="text-[9px] font-black uppercase tracking-wider text-red-500">Cambiar</button>
+                        </div>
+                      )}
+                      <label className="flex cursor-pointer items-start gap-3">
+                        <input type="checkbox" required checked={autorizacionTutorJoven} onChange={(e) => setAutorizacionTutorJoven(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-violet-600" />
+                        <span className="text-[10px] font-semibold leading-relaxed text-violet-950">Confirmo que la madre, padre o persona tutora revisó y acepta los Términos, Condiciones y Aviso de Privacidad, y autorizó el registro y la tarjeta digital.</span>
+                      </label>
+                      <p className="text-[9px] leading-relaxed text-violet-700">La credencial se valida en esta alta y no se conserva después de activar la cuenta.</p>
+                    </div>
                   )}
+                  <p className="text-[9px] font-medium leading-relaxed text-slate-400">{LEYENDA_PROGRAMA}</p>
                 </div>
               )}
               

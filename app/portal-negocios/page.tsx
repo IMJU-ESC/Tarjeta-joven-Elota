@@ -6,7 +6,7 @@ import { collection, query, where, getDocs, addDoc, deleteDoc, doc, updateDoc, s
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { EmailAuthProvider, onAuthStateChanged, reauthenticateWithCredential, signOut, updatePassword } from "firebase/auth";
 import { auth, db, storage } from "../../firebase"; 
-import { DECLARACION_NEUTRALIDAD_VERSION } from "@/lib/politica-programa";
+import { DECLARACION_NEUTRALIDAD_VERSION, LEYENDA_PROGRAMA } from "@/lib/politica-programa";
 import dynamic from "next/dynamic";
 import imageCompression from 'browser-image-compression';
 import "leaflet/dist/leaflet.css";
@@ -465,7 +465,7 @@ export default function PortalNegocios() {
   const publicarEmpleo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!aceptaNeutralidadPublicacion) {
-      alert("Confirma que la vacante es comercial, apartidista y no condiciona oportunidades a apoyo político o electoral.");
+      alert("Confirma que la vacante cumple los Términos y Condiciones del programa.");
       return;
     }
     try {
@@ -480,7 +480,7 @@ export default function PortalNegocios() {
   const publicarPromo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!aceptaNeutralidadPublicacion) {
-      alert("Confirma que el beneficio es comercial, apartidista y no está condicionado a apoyo político o electoral.");
+      alert("Confirma que el beneficio cumple los Términos y Condiciones del programa.");
       return;
     }
     setPublicandoPromo(true);
@@ -1288,8 +1288,9 @@ export default function PortalNegocios() {
 
                 <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-900/60 dark:bg-violet-950/25">
                   <input type="checkbox" required checked={aceptaNeutralidadPublicacion} onChange={(e) => setAceptaNeutralidadPublicacion(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-violet-600" />
-                  <span className="text-[10px] font-semibold leading-relaxed text-violet-950 dark:text-violet-200">Declaro que esta publicación es comercial, legítima y apartidista. No ofrece ni condiciona beneficios, empleo o trato preferente a cambio de afiliación, asistencia, difusión, apoyo o voto político-electoral.</span>
+                  <span className="text-[10px] font-semibold leading-relaxed text-violet-950 dark:text-violet-200">Confirmo que esta publicación es comercial, legítima y cumple los Términos y Condiciones del programa.</span>
                 </label>
+                <p className="px-2 text-center text-[9px] font-medium leading-relaxed text-slate-400 dark:text-slate-500">{LEYENDA_PROGRAMA}</p>
 
                 <div className="pt-6 border-t border-slate-200 dark:border-slate-700 mt-2">
                   <button type="submit" disabled={publicandoPromo} className={`w-full text-white font-black py-5 rounded-[2rem] text-[11px] uppercase tracking-widest shadow-xl transition-all active:scale-95 ${publicandoPromo ? "bg-slate-400 dark:bg-slate-600" : "bg-[#0F766E] hover:bg-slate-900 dark:bg-teal-700 dark:hover:bg-teal-600 shadow-[#0F766E]/20"}`}>

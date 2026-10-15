@@ -8,7 +8,7 @@ import Link from "next/link";
 import { Camera, type CameraHandle } from "@/components/NativeCamera";
 import { normalizarCorreo } from "@/lib/credenciales";
 import { compressImageDataUrl, readFileAsDataUrl } from "@/lib/client-image";
-import { CONSENTIMIENTO_VERSION } from "@/lib/politica-programa";
+import { CONSENTIMIENTO_VERSION, LEYENDA_PROGRAMA } from "@/lib/politica-programa";
 
 export default function LoginJoven() {
   const [vistaActual, setVistaActual] = useState("login"); 
@@ -27,6 +27,8 @@ export default function LoginJoven() {
   const [registroExitoso, setRegistroExitoso] = useState(false);
   const [aceptaTerminos, setAceptaTerminos] = useState(false);
   const [autorizacionTutor, setAutorizacionTutor] = useState(false);
+  const [parentescoTutor, setParentescoTutor] = useState("");
+  const [documentoTutorBase64, setDocumentoTutorBase64] = useState<string | null>(null);
 
   const [fotoBase64, setFotoBase64] = useState<string | null>(null);
   const [docBase64, setDocBase64] = useState<string | null>(null); 
@@ -104,6 +106,26 @@ export default function LoginJoven() {
     }
   };
 
+  const manejarSubidaDocumentoTutor = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      alert("La credencial de la madre, padre o persona tutora debe enviarse como fotografía.");
+      return;
+    }
+    try {
+      setDocumentoTutorBase64(await compressImageDataUrl(await readFileAsDataUrl(file), "document"));
+    } catch (error: any) {
+      alert(error?.message || "No pudimos optimizar la credencial.");
+    }
+  };
+
+  const limpiarDatosTutor = () => {
+    setAutorizacionTutor(false);
+    setParentescoTutor("");
+    setDocumentoTutorBase64(null);
+  };
+
   const calcularEdad = (fechaNac: string) => {
     const hoy = new Date(); const cumple = new Date(fechaNac);
     let edad = hoy.getFullYear() - cumple.getFullYear();
@@ -121,8 +143,8 @@ export default function LoginJoven() {
     if (!fotoBase64) { alert("Falta el PASO 2: Tómate o sube una fotografía para tu perfil."); return; }
     if (!docBase64 && !docFile) { alert("Falta el PASO 3: Tómate foto o sube un documento que compruebe tu identidad."); return; }
     if (!aceptaTerminos) { alert("Debes leer y aceptar los Términos, Condiciones y Aviso de Privacidad."); return; }
-    if (edad < 18 && !autorizacionTutor) {
-      alert("Como eres menor de edad, necesitas confirmar que cuentas con la autorización de tu madre, padre o persona tutora.");
+    if (edad < 18 && (!autorizacionTutor || !parentescoTutor || !documentoTutorBase64)) {
+      alert("Para registrar a una persona menor necesitamos el parentesco, la credencial y la aceptación de la madre, padre o persona tutora.");
       return;
     }
 
@@ -149,6 +171,9 @@ export default function LoginJoven() {
         documentoProbatorio: documento,
         aceptoTerminos: true,
         autorizacionTutor: edad < 18 ? autorizacionTutor : false,
+        aceptaTerminosTutor: edad < 18 ? autorizacionTutor : false,
+        parentescoTutor: edad < 18 ? parentescoTutor : "",
+        documentoTutor: edad < 18 ? documentoTutorBase64 : null,
         consentimientoVersion: CONSENTIMIENTO_VERSION,
       });
       if (new Blob([payload]).size > 3_800_000) {
@@ -168,7 +193,7 @@ export default function LoginJoven() {
       setRegistroExitoso(true);
       setRegNombre(""); setRegFechaNac(""); setRegCorreo(""); setRegGenero("");
       setFotoBase64(null); setDocBase64(null); setDocFile(null);
-      setAceptaTerminos(false); setAutorizacionTutor(false);
+      setAceptaTerminos(false); limpiarDatosTutor();
 
     } catch (error: any) {
       console.error("Error registrando joven:", error);
@@ -282,7 +307,7 @@ export default function LoginJoven() {
                </div>
                <div>
                  <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-300 mb-1">Fecha de Nacimiento</label>
-                 <input type="date" value={regFechaNac} onChange={(e) => { setRegFechaNac(e.target.value); setAutorizacionTutor(false); }} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-500 dark:text-slate-300 outline-none focus:border-[#0F766E]" required />
+                 <input type="date" value={regFechaNac} onChange={(e) => { setRegFechaNac(e.target.value); limpiarDatosTutor(); }} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-500 dark:text-slate-300 outline-none focus:border-[#0F766E]" required />
                </div>
                <div>
                  <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-300 mb-1">Género</label>
@@ -339,7 +364,31 @@ export default function LoginJoven() {
             </div>
 
             {regFechaNac && calcularEdad(regFechaNac) >= 12 && calcularEdad(regFechaNac) < 18 && (
-              <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-900/60 dark:bg-violet-950/25">
+              <div className="space-y-4 rounded-2xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-900/60 dark:bg-violet-950/25">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-violet-800 dark:text-violet-300">Autorización de madre, padre o tutor</p>
+                  <p className="mt-1 text-[10px] leading-relaxed text-slate-600 dark:text-slate-300">Estos datos sólo se usan para validar la autorización. La credencial se elimina cuando la solicitud se aprueba o rechaza.</p>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold text-slate-600 dark:text-slate-300">Parentesco</label>
+                  <select value={parentescoTutor} onChange={(e) => setParentescoTutor(e.target.value)} className="w-full rounded-xl border border-violet-200 bg-white px-4 py-3 text-xs font-bold text-slate-700 outline-none focus:border-violet-500 dark:border-violet-900 dark:bg-slate-800 dark:text-white" required>
+                    <option value="">Selecciona una opción...</option>
+                    <option value="Madre">Madre</option>
+                    <option value="Padre">Padre</option>
+                    <option value="Tutor legal">Tutor o tutora legal</option>
+                  </select>
+                </div>
+                {!documentoTutorBase64 ? (
+                  <label className="flex cursor-pointer items-center justify-center rounded-xl border border-violet-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-widest text-violet-700 shadow-sm dark:border-violet-900 dark:bg-slate-800 dark:text-violet-300">
+                    📁 Subir credencial del tutor
+                    <input type="file" accept="image/*" onChange={manejarSubidaDocumentoTutor} className="hidden" required />
+                  </label>
+                ) : (
+                  <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-white p-3 dark:border-emerald-900 dark:bg-slate-800">
+                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300">✓ Credencial lista y comprimida</span>
+                    <button type="button" onClick={() => setDocumentoTutorBase64(null)} className="text-[9px] font-black uppercase tracking-wider text-red-500">Cambiar</button>
+                  </div>
+                )}
                 <label className="flex cursor-pointer items-start gap-3">
                   <input
                     type="checkbox"
@@ -349,8 +398,7 @@ export default function LoginJoven() {
                     className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded accent-violet-600"
                   />
                   <span className="text-[10px] font-medium leading-relaxed text-slate-700 dark:text-slate-200">
-                    <strong>Soy menor de 18 años</strong> y confirmo que mi madre, padre o persona tutora revisó conmigo el aviso, conoce el registro y <strong>autorizó expresamente</strong> el tratamiento de mis datos, fotografía, documento de validación y la creación de mi Tarjeta Joven digital.
-                    <span className="mt-1 block text-slate-500 dark:text-slate-400">El IMJU podrá solicitar la comprobación de esta autorización cuando resulte necesario.</span>
+                    Confirmo que mi madre, padre o persona tutora revisó y acepta los <strong>Términos, Condiciones y Aviso de Privacidad</strong>, y autoriza expresamente mi registro, el tratamiento de mis datos y la emisión de mi Tarjeta Joven digital.
                   </span>
                 </label>
               </div>
@@ -362,10 +410,11 @@ export default function LoginJoven() {
                 <span className="text-[10px] font-medium text-slate-600 dark:text-slate-300 leading-relaxed">
                   He leído y acepto los <Link href="/aviso-de-privacidad" target="_blank" className="text-[#0F766E] dark:text-teal-400 font-bold underline">Términos, Condiciones y Aviso de Privacidad</Link> del IMJU Elota.
                   <span className="mt-1 block text-slate-400">Entiendo que mi documento se utilizará sólo para validar la solicitud y se eliminará al aprobarla o rechazarla.</span>
-                  <span className="mt-1 block font-semibold text-slate-500 dark:text-slate-300">También entiendo que el programa es gratuito y apartidista: registrarme o recibir beneficios nunca depende de apoyar, afiliarme o votar por una persona o partido.</span>
                 </span>
               </label>
             </div>
+
+            <p className="px-2 text-center text-[9px] font-medium leading-relaxed text-slate-400">{LEYENDA_PROGRAMA}</p>
 
             <button type="submit" disabled={registrando} className={`w-full text-white font-black py-4 rounded-2xl transition-all shadow-xl uppercase tracking-widest text-[11px] ${registrando ? "bg-slate-400 cursor-not-allowed" : "bg-[#0F766E] dark:bg-teal-700 hover:bg-slate-900 shadow-teal-900/20 active:scale-95"}`}>
               {registrando ? "Enviando Solicitud..." : "Enviar a Revisión"}
