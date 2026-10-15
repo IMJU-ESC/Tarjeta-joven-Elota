@@ -75,7 +75,7 @@ export default function AvisoDePrivacidad() {
               <strong>Tratamiento de Fotografía e Identificación:</strong> Se recabará una fotografía del rostro del solicitante y una imagen o archivo de un documento idóneo (por ejemplo, INE, acta de nacimiento o credencial escolar). Debido al riesgo que representa su exposición, tendrán manejo restringido y se utilizarán únicamente para corroborar la elegibilidad de 12 a 29 años, prevenir suplantaciones y emitir la credencial digital personalizada. <u>No se usarán</u> para reconocimiento facial automatizado ni se expondrán en directorios públicos.
             </div>
             <p>
-              La información recabada servirá para generar un expediente electrónico, llevar un control estadístico (disociado) de impacto demográfico municipal y mantener comunicación sobre convocatorias. No será comercializada, alquilada ni compartida con el sector privado.
+              La información recabada servirá para generar un expediente electrónico, llevar un control estadístico disociado de impacto demográfico municipal y mantener comunicación institucional sobre el programa. No será comercializada, alquilada ni utilizada para finalidades incompatibles; cualquier acceso limitado por negocios aliados se sujetará estrictamente a lo previsto en la sección 8.
             </p>
           </section>
 
@@ -108,7 +108,7 @@ export default function AvisoDePrivacidad() {
           <section className="bg-teal-50/70 p-6 md:p-8 rounded-[2rem] border border-teal-200 shadow-sm">
             <h2 className="text-xl font-black text-[#0F766E] mb-4 uppercase tracking-widest border-b border-teal-200 pb-2">7. Obligaciones y Responsabilidad de Negocios Aliados</h2>
             <p className="mb-4 font-bold text-teal-950">
-              Al registrarse y hacer uso del "Portal de Negocios", el propietario, administrador o representante legal del establecimiento declara aceptar incondicionalmente las siguientes cláusulas de exención de responsabilidad institucional:
+              Al registrarse y utilizar el "Portal de Negocios", el propietario, administrador o representante del establecimiento declara conocer y aceptar las siguientes obligaciones y delimitaciones de responsabilidad:
             </p>
             <ul className="list-disc pl-6 space-y-3 font-medium text-teal-900 leading-relaxed">
               <li>
@@ -118,7 +118,7 @@ export default function AvisoDePrivacidad() {
                 <strong>Responsabilidad frente al consumidor:</strong> El Negocio Aliado es responsable, conforme a la legislación aplicable, de respetar precios, descuentos, vigencias, condiciones y restricciones publicadas. El IMJU no vende los bienes o servicios ni garantiza su calidad; las reclamaciones comerciales deberán dirigirse primero al establecimiento, sin limitar los derechos que correspondan a la persona consumidora.
               </li>
               <li>
-                <strong>Deslinde Laboral (Bolsa de Trabajo):</strong> Toda vacante publicada es gestionada directamente por el empleador privado. El IMJU no funge como agencia de colocación ni asume figura patronal o solidaria. Cualquier conflicto por salarios, seguridad social (IMSS), riesgos de trabajo o demandas obrero-patronales deberá resolverse exclusivamente entre el joven solicitante y la empresa contratante.
+                <strong>Vacantes y relación laboral:</strong> Toda vacante es publicada y gestionada por el empleador indicado. El IMJU no contrata, selecciona ni asume la calidad de patrón. Las personas conservan íntegros sus derechos para acudir ante las autoridades competentes por salarios, seguridad social, discriminación, riesgos de trabajo o cualquier otra controversia.
               </li>
               <li>
                 <strong>Revisión y suspensión:</strong> Ante incumplimientos, reportes fundamentados, contenido ilícito o uso político-electoral, el IMJU podrá retirar publicaciones y suspender o cancelar el acceso, documentando la decisión y respetando las garantías y medios de aclaración que resulten aplicables.
@@ -152,7 +152,7 @@ export default function AvisoDePrivacidad() {
           <section>
             <h2 className="text-xl font-black text-[#0F766E] mb-4 uppercase tracking-widest border-b border-slate-100 pb-2">10. Ejercicio de Derechos ARCO</h2>
             <p className="mb-4">
-              Usted tiene derecho inalienable a conocer qué datos personales tenemos registrados (Acceso); solicitar la corrección de su información en caso de ser inexacta o desactualizada (Rectificación); exigir la eliminación total de su perfil y datos de nuestros servidores (Cancelación); así como oponerse al uso de sus datos para fines específicos (Oposición).
+              Usted tiene derecho a conocer los datos personales que tratamos (Acceso); solicitar su corrección cuando sean inexactos o estén desactualizados (Rectificación); pedir su cancelación cuando resulte procedente conforme a los plazos y excepciones legales; y oponerse a determinados tratamientos (Oposición).
             </p>
             <p>
               Para ejercer cualquiera de los derechos ARCO, el titular podrá presentar su solicitud por escrito en las oficinas del Instituto Municipal de la Juventud de Elota, ubicadas en Av. Gabriel Leyva S/N, Centro, C.P. 82700, La Cruz, Sinaloa, o enviarla al correo <strong>tarjetaimjuelota@gmail.com</strong>.
